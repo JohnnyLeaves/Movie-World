@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCatalog, ApiError } from "./catalog.js";
+import { GENRES } from "../public/js/catalog-filters.js";
 
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 const mime = {
@@ -48,7 +49,10 @@ export function createApp({
           mode = url.searchParams.get("mode") || "demo",
           query = (url.searchParams.get("query") || "").trim(),
           page = Number(url.searchParams.get("page") || 1),
-          sort = url.searchParams.get("sort") || "popular";
+          sort = url.searchParams.get("sort") || "popular",
+          genre = url.searchParams.get("genre") || "",
+          year = url.searchParams.get("year") || "",
+          minScore = Number(url.searchParams.get("minScore") || 0);
         if (
           !["all", "movie", "tv", "anime"].includes(kind) ||
           !["live", "demo"].includes(mode) ||
@@ -56,12 +60,29 @@ export function createApp({
           !Number.isInteger(page) ||
           page < 1 ||
           page > 500 ||
-          query.length > 150
+          query.length > 150 ||
+          (genre && !GENRES.includes(genre)) ||
+          (year &&
+            (!/^\d{4}$/.test(year) ||
+              Number(year) < 1900 ||
+              Number(year) > new Date().getFullYear() + 5)) ||
+          !Number.isFinite(minScore) ||
+          minScore < 0 ||
+          minScore > 10
         )
           throw new ApiError("Invalid search parameters.", 400);
         return json(
           200,
-          await catalog.catalog({ kind, mode, query, page, sort }),
+          await catalog.catalog({
+            kind,
+            mode,
+            query,
+            page,
+            sort,
+            genre,
+            year,
+            minScore,
+          }),
         );
       }
       if (url.pathname.startsWith("/api/title/")) {
@@ -75,6 +96,30 @@ export function createApp({
         return json(
           200,
           await catalog.detail(match[1], match[2], Number(match[3]), mode),
+        );
+      }
+      if (url.pathname.startsWith("/api/availability/")) {
+        const match = url.pathname.match(
+            /^\/api\/availability\/(movie|tv)\/(\d+)$/,
+          ),
+          region = url.searchParams.get("region") || "PT";
+        if (
+          !match ||
+          !["PT", "US", "GB", "ES", "FR", "DE", "JP", "BR"].includes(region)
+        )
+          throw new ApiError("Invalid availability request.", 400);
+        return json(
+          200,
+          await catalog.availability(match[1], Number(match[2]), region),
+        );
+      }
+      if (url.pathname.startsWith("/api/season/")) {
+        const match = url.pathname.match(/^\/api\/season\/(\d+)\/(\d+)$/);
+        if (!match || Number(match[2]) > 200)
+          throw new ApiError("Invalid season.", 400);
+        return json(
+          200,
+          await catalog.season(Number(match[1]), Number(match[2])),
         );
       }
       if (url.pathname.startsWith("/api/"))

@@ -1,4 +1,5 @@
 import { demoTitles } from "./demo.js";
+import { matchesFilters } from "../public/js/catalog-filters.js";
 
 const genres = {
   28: "Action",
@@ -63,6 +64,22 @@ export function normalizeTmdb(item, kind) {
         (v) => v.site === "YouTube" && v.type === "Trailer",
       )?.key || null,
     demo: false,
+    releaseDate: item.release_date || item.first_air_date || "",
+    status: item.status || "",
+    tagline: item.tagline || "",
+    originalTitle: item.original_title || item.original_name || "",
+    nextAirDate: item.next_episode_to_air?.air_date || "",
+    nextEpisode: item.next_episode_to_air?.name || "",
+    seasonList: (item.seasons || []).map((s) => ({
+      number: s.season_number,
+      name: s.name,
+      episodes: s.episode_count,
+      airDate: s.air_date,
+    })),
+    recommendations: (item.recommendations?.results || [])
+      .filter((t) => !t.media_type || ["movie", "tv"].includes(t.media_type))
+      .slice(0, 12)
+      .map((t) => normalizeTmdb(t, type)),
   };
 }
 export function normalizeJikan(item) {
@@ -85,6 +102,8 @@ export function normalizeJikan(item) {
     creator: (item.studios || []).map((s) => s.name).join(", "),
     trailer: item.trailer?.youtube_id || null,
     demo: false,
+    releaseDate: item.aired?.from?.slice(0, 10) || "",
+    status: item.status || "",
   };
 }
 export function normalizeAnilist(item) {
@@ -114,6 +133,24 @@ export function normalizeAnilist(item) {
     creator: item.studios?.nodes?.map((s) => s.name).join(", ") || "",
     trailer: item.trailer?.site === "youtube" ? item.trailer.id : null,
     demo: false,
+    releaseDate:
+      item.startDate?.year && item.startDate?.month && item.startDate?.day
+        ? `${item.startDate.year}-${String(item.startDate.month).padStart(2, "0")}-${String(item.startDate.day).padStart(2, "0")}`
+        : "",
+    nextAirDate: item.nextAiringEpisode?.airingAt
+      ? new Date(item.nextAiringEpisode.airingAt * 1000)
+          .toISOString()
+          .slice(0, 10)
+      : "",
+    nextEpisode: item.nextAiringEpisode?.episode
+      ? `Episode ${item.nextAiringEpisode.episode}`
+      : "",
+    status: item.status || "",
+    recommendations: (item.recommendations?.nodes || [])
+      .map((n) => n.mediaRecommendation)
+      .filter((t) => t?.idMal)
+      .slice(0, 12)
+      .map(normalizeAnilist),
   };
 }
 
@@ -182,7 +219,7 @@ export function createCatalog({
       true,
     );
   const animeFields =
-    "idMal title { english romaji } startDate { year } averageScore coverImage { large } bannerImage description(asHtml: false) genres duration episodes studios(isMain: true) { nodes { name } } trailer { id site }";
+    "idMal title { english romaji } startDate { year month day } status nextAiringEpisode { airingAt episode } averageScore coverImage { large } bannerImage description(asHtml: false) genres duration episodes studios(isMain: true) { nodes { name } } trailer { id site }";
   async function anilist(query, variables) {
     const key = JSON.stringify({ query, variables });
     const cached = cache.get(key);
@@ -227,14 +264,25 @@ export function createCatalog({
     animeQueue = job.catch(() => {});
     return job;
   }
-  async function animeList({ page, query, sort, limit = 24 }) {
+  async function animeList({
+    page,
+    query,
+    sort,
+    limit = 24,
+    genre = "",
+    year = "",
+    minScore = 0,
+  }) {
     try {
       const data = await anilist(
-        `query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort]) { Page(page: $page, perPage: $perPage) { pageInfo { currentPage lastPage total hasNextPage } media(type: ANIME, isAdult: false, search: $search, sort: $sort) { ${animeFields} } } }`,
+        `query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort], $genre: String, $year: Int, $score: Int) { Page(page: $page, perPage: $perPage) { pageInfo { currentPage lastPage total hasNextPage } media(type: ANIME, isAdult: false, search: $search, sort: $sort, genre: $genre, seasonYear: $year, averageScore_greater: $score) { ${animeFields} } } }`,
         {
           page,
           perPage: limit,
           search: query || null,
+          genre: genre || null,
+          year: year ? Number(year) : null,
+          score: Number(minScore) ? Number(minScore) * 10 - 1 : null,
           sort: query
             ? ["SEARCH_MATCH"]
             : sort === "rating"
@@ -272,13 +320,15 @@ export function createCatalog({
         sort: "desc",
       });
       return {
-        results: (data.data || []).map(normalizeJikan),
+        results: (data.data || [])
+          .map(normalizeJikan)
+          .filter((t) => matchesFilters(t, { genre, year, minScore })),
         page,
         totalPages: Math.min(data.pagination?.last_visible_page || 1, 500),
         total: data.pagination?.items?.total || 0,
         mode: "live",
         warning:
-          "AniList is unavailable. Showing MyAnimeList results via Jikan.",
+          "AniList is unavailable. Showing MyAnimeList results via Jikan; active filters refine this fallback page.",
       };
     }
   }
@@ -288,6 +338,9 @@ export function createCatalog({
     page = 1,
     sort = "popular",
     mode = "demo",
+    genre = "",
+    year = "",
+    minScore = 0,
   } = {}) {
     if (mode === "demo") {
       let results = demoTitles.filter(
@@ -295,7 +348,8 @@ export function createCatalog({
           (kind === "all" || t.kind === kind) &&
           `${t.title} ${t.genres.join(" ")} ${t.creator}`
             .toLowerCase()
-            .includes(query.toLowerCase()),
+            .includes(query.toLowerCase()) &&
+          matchesFilters(t, { genre, year, minScore }),
       );
       if (sort === "rating")
         results = results.toSorted((a, b) => b.score - a.score);
@@ -315,7 +369,7 @@ export function createCatalog({
         503,
       );
     if (kind === "anime") {
-      return animeList({ page, query, sort });
+      return animeList({ page, query, sort, genre, year, minScore });
     }
     if (kind === "all") {
       // Provider pages advance independently; the UI labels this as a combined page, not a global ranking.
@@ -337,7 +391,9 @@ export function createCatalog({
         ...(b?.results || []),
       ];
       return {
-        results,
+        results: results.filter((t) =>
+          matchesFilters(t, { genre, year, minScore }),
+        ),
         page,
         totalPages: Math.max(
           Math.min(a?.total_pages || 0, 500),
@@ -365,10 +421,37 @@ export function createCatalog({
                     : "first_air_date.desc"
                   : "popularity.desc",
             "vote_count.gte": sort === "rating" ? "200" : "20",
+            ...(genre
+              ? {
+                  with_genres: String(
+                    Number(
+                      Object.keys(genres).find(
+                        (id) =>
+                          genres[id] === genre &&
+                          (kind === "tv"
+                            ? !["28", "878"].includes(id)
+                            : !["10759", "10765"].includes(id)),
+                      ),
+                    ) || 0,
+                  ),
+                }
+              : {}),
+            ...(year
+              ? {
+                  [kind === "movie"
+                    ? "primary_release_year"
+                    : "first_air_date_year"]: String(year),
+                }
+              : {}),
+            ...(Number(minScore)
+              ? { "vote_average.gte": String(minScore) }
+              : {}),
           }),
     });
     return {
-      results: (data.results || []).map((t) => normalizeTmdb(t, kind)),
+      results: (data.results || [])
+        .map((t) => normalizeTmdb(t, kind))
+        .filter((t) => !query || matchesFilters(t, { genre, year, minScore })),
       page,
       totalPages: Math.min(data.total_pages || 1, 500),
       total: data.total_results || 0,
@@ -379,12 +462,24 @@ export function createCatalog({
     if (mode === "demo") {
       const found = demoTitles.find((t) => t.key === `${source}:${kind}:${id}`);
       if (!found) throw new ApiError("Title not found.", 404);
-      return found;
+      const related = demoTitles
+        .filter(
+          (t) =>
+            t.key !== found.key &&
+            t.genres.some((g) => found.genres.includes(g)),
+        )
+        .sort(
+          (a, b) =>
+            b.genres.filter((g) => found.genres.includes(g)).length -
+            a.genres.filter((g) => found.genres.includes(g)).length,
+        )
+        .slice(0, 6);
+      return { ...found, recommendations: related };
     }
     if (source === "jikan" && kind === "anime") {
       try {
         const data = await anilist(
-          `query ($id: Int) { Media(idMal: $id, type: ANIME, isAdult: false) { ${animeFields} } }`,
+          `query ($id: Int) { Media(idMal: $id, type: ANIME, isAdult: false) { ${animeFields} recommendations(sort: RATING_DESC, perPage: 8) { nodes { mediaRecommendation { ${animeFields} } } } } }`,
           { id },
         );
         if (!data.Media) throw new ApiError("Title not found.", 404);
@@ -401,9 +496,53 @@ export function createCatalog({
         503,
       );
     return normalizeTmdb(
-      await tmdb(`${kind}/${id}`, { append_to_response: "credits,videos" }),
+      await tmdb(`${kind}/${id}`, {
+        append_to_response: "credits,videos,recommendations",
+      }),
       kind,
     );
   }
-  return { catalog, detail, configured: Boolean(token) };
+  async function availability(kind, id, region = "PT") {
+    if (!token)
+      throw new ApiError("Connect TMDB to see regional availability.", 503);
+    const data = await tmdb(`${kind}/${id}/watch/providers`),
+      item = data.results?.[region] || {};
+    const group = (key) =>
+      (item[key] || []).map((p) => ({
+        id: p.provider_id,
+        name: p.provider_name,
+        logo: p.logo_path ? `https://image.tmdb.org/t/p/w92${p.logo_path}` : "",
+      }));
+    return {
+      region,
+      link:
+        typeof item.link === "string" &&
+        item.link.startsWith("https://www.themoviedb.org/")
+          ? item.link
+          : null,
+      stream: group("flatrate"),
+      rent: group("rent"),
+      buy: group("buy"),
+      free: group("free"),
+      ads: group("ads"),
+    };
+  }
+  async function season(id, number) {
+    if (!token) throw new ApiError("Connect TMDB to explore seasons.", 503);
+    const data = await tmdb(`tv/${id}/season/${number}`);
+    return {
+      number,
+      name: data.name,
+      episodes: (data.episodes || []).map((e) => ({
+        id: e.id,
+        number: e.episode_number,
+        name: e.name,
+        airDate: e.air_date,
+        overview: e.overview || "",
+        runtime: e.runtime || null,
+        score: e.vote_average || 0,
+      })),
+    };
+  }
+  return { catalog, detail, availability, season, configured: Boolean(token) };
 }

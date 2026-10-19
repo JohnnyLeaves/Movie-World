@@ -1,3 +1,4 @@
+import { normalizeLog } from "./insights.js";
 export const STORAGE_KEY = "movie-world.library.v1";
 export const STATUSES = [
   "planned",
@@ -9,6 +10,8 @@ export const STATUSES = [
 export const emptyLibrary = () => ({
   version: 1,
   entries: {},
+  diary: [],
+  goal: 52,
   folders: [
     { id: "next-up", name: "Next up" },
     { id: "mind-benders", name: "Mind-benders" },
@@ -63,6 +66,13 @@ export function validateTitle(t) {
         ? t.trailer
         : null,
     demo: Boolean(t.demo),
+    ...(typeof t.releaseDate === "string"
+      ? { releaseDate: t.releaseDate.slice(0, 10) }
+      : {}),
+    ...(typeof t.nextAirDate === "string"
+      ? { nextAirDate: t.nextAirDate.slice(0, 10) }
+      : {}),
+    ...(typeof t.status === "string" ? { status: t.status.slice(0, 80) } : {}),
   };
 }
 export function parseLibrary(text) {
@@ -114,15 +124,52 @@ export function parseLibrary(text) {
         ? [...new Set(raw.folders.filter((id) => ids.has(id)))]
         : [],
       progress: Math.max(0, Math.floor(Number(raw.progress) || 0)),
+      priority: ["low", "normal", "high"].includes(raw.priority)
+        ? raw.priority
+        : "normal",
+      tags: Array.isArray(raw.tags)
+        ? [
+            ...new Set(
+              raw.tags
+                .filter((t) => typeof t === "string")
+                .map((t) => t.trim().slice(0, 30))
+                .filter(Boolean),
+            ),
+          ].slice(0, 12)
+        : [],
       updatedAt:
         typeof raw.updatedAt === "string"
           ? raw.updatedAt
           : new Date().toISOString(),
     };
   }
-  return { version: 1, entries, folders };
+  if (
+    data.diary !== undefined &&
+    (!Array.isArray(data.diary) || data.diary.length > 100000)
+  )
+    throw new Error("Invalid watch diary.");
+  const diary = (data.diary || []).map(normalizeLog);
+  if (new Set(diary.map((l) => l.id)).size !== diary.length)
+    throw new Error("Duplicate diary identifiers.");
+  return {
+    version: 1,
+    entries,
+    folders,
+    diary,
+    goal:
+      Number.isInteger(data.goal) && data.goal >= 1 && data.goal <= 1000
+        ? data.goal
+        : 52,
+  };
 }
 export function saveTitle(library, title, patch = {}) {
+  if (
+    !library.entries[title.key] &&
+    Object.keys(library.entries).length >= 20000
+  )
+    throw new Error(
+      "Your library supports up to 20,000 titles. Export a backup before starting another library.",
+    );
   const current = library.entries[title.key] || {
     title: validateTitle(title),
     favorite: false,
@@ -131,6 +178,8 @@ export function saveTitle(library, title, patch = {}) {
     notes: "",
     folders: [],
     progress: 0,
+    priority: "normal",
+    tags: [],
   };
   return {
     ...library,
@@ -200,14 +249,20 @@ export function filterEntries(
       (!folder || e.folders.includes(folder)) &&
       (kind === "all" || e.title.kind === kind) &&
       (status === "all" || e.status === status) &&
-      e.title.title.toLowerCase().includes(query.toLowerCase()),
+      `${e.title.title} ${e.notes} ${(e.tags || []).join(" ")} ${e.title.genres.join(" ")}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
   );
   entries.sort(
     sort === "rating"
       ? (a, b) => b.rating - a.rating
-      : sort === "title"
-        ? (a, b) => a.title.title.localeCompare(b.title.title)
-        : (a, b) => b.updatedAt.localeCompare(a.updatedAt),
+      : sort === "priority"
+        ? (a, b) =>
+            ({ high: 2, normal: 1, low: 0 })[b.priority || "normal"] -
+            { high: 2, normal: 1, low: 0 }[a.priority || "normal"]
+        : sort === "title"
+          ? (a, b) => a.title.title.localeCompare(b.title.title)
+          : (a, b) => b.updatedAt.localeCompare(a.updatedAt),
   );
   return entries;
 }
