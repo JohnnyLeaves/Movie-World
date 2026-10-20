@@ -14,8 +14,27 @@ import {
   pickTonight,
   scheduledTitles,
   validDate,
+  hasWatched,
 } from "../public/js/insights.js";
 import { demoTitles } from "../server/demo.js";
+
+test('watched status and a rewatch queue survive backup and future status changes',()=>{
+  const title=demoTitles[0];let lib=saveTitle(emptyLibrary(),title,{status:'completed'});
+  lib=saveTitle(lib,title,{status:'watching',rewatchQueued:true});
+  assert.equal(hasWatched(lib,title.key),true);assert.equal(filterEntries(lib,{view:'rewatch'}).length,1);
+  assert.deepEqual(parseLibrary(JSON.stringify(lib)),lib);
+  lib=logWatch(lib,title,{rewatch:true,id:'another-watch'});assert.equal(lib.entries[title.key].rewatchQueued,false);
+});
+test('watched but unrated titles influence discovery; low ratings reduce matching suggestions',()=>{
+  const seed={...demoTitles[0],genres:['Sci-Fi']},similar={...demoTitles[1],genres:['Sci-Fi'],score:8},different={...demoTitles[11],genres:['Crime'],score:8};
+  let lib=saveTitle(emptyLibrary(),seed,{status:'completed'});
+  assert.equal(recommendTitles(lib,[different,similar])[0].title.key,similar.key);
+  lib=saveTitle(lib,seed,{rating:1});assert.equal(recommendTitles(lib,[different,similar])[0].title.key,different.key);
+});
+test('completed diary history prevents recommending a watched title even after library removal',()=>{
+  let lib=saveTitle(emptyLibrary(),demoTitles[0]);lib=logWatch(lib,demoTitles[0],{id:'watched-once'});lib=removeTitle(lib,demoTitles[0].key);
+  assert.equal(hasWatched(lib,demoTitles[0].key),true);assert.equal(recommendTitles(lib,[demoTitles[0]]).length,0);
+});
 
 test("watch logs preserve diary metadata through backups and after title removal", () => {
   const title = demoTitles[0];

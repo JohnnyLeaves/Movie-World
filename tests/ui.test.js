@@ -172,4 +172,15 @@ test("app interactions: discovery filters, diary, goals, collections, bulk edit 
   assert.ok(doc.querySelectorAll(".calendar-day").length >= 28);
   await navigate("recommendations");
   assert.ok(doc.querySelector(".recommendation-grid .title-card"));
+  await navigate('watched');assert.equal(doc.querySelectorAll('#main .title-card').length,1);
+  click('[data-action="queue-rewatch"][data-key="tmdb:movie:335984"]');
+  await navigate('rewatch');assert.equal(doc.querySelectorAll('#main .title-card').length,1);
+  await navigate('discover');
+  let hide=doc.querySelector('#hide-watched');hide.checked=true;hide.dispatchEvent(new window.Event('change',{bubbles:true}));
+  assert.equal(doc.querySelectorAll('#main .title-card').length,23);
+  assert.equal(doc.querySelector('#main [data-action="detail"][data-key="tmdb:movie:335984"]'),null);
+  hide=doc.querySelector('#hide-watched');hide.checked=false;hide.dispatchEvent(new window.Event('change',{bubbles:true}));
+  click('[data-action="mark-watched"][data-key="tmdb:movie:27205"]');
+  assert.equal(JSON.parse(window.localStorage.getItem('movie-world.library.v1')).entries['tmdb:movie:27205'].watched,true);
+  assert.equal(JSON.parse(window.localStorage.getItem('movie-world.library.v1')).diary.length,1,'Marking watched must not invent a watch date');
 });

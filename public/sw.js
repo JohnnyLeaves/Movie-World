@@ -5,6 +5,7 @@ const SHELL = [
   "/index.html",
   "/styles.css",
   "/experience.css",
+  '/watch.css',
   "/manifest.webmanifest",
   "/assets/icon.svg",
   "/assets/tmdb.svg",

@@ -35,6 +35,11 @@ Open **http://127.0.0.1:3000**. No install step, build step, database or API key
 
 ### Build a library worth keeping
 
+- One-click **Mark watched** controls on title cards and title pages, plus a dedicated **Watched** section.
+- A persistent **Hide watched titles** switch for discovery and library results. It filters the loaded page against saved status and completion history.
+- A **Rewatch list** for titles you want to revisit. Logging a completed rewatch clears its queue flag while retaining previous diary records.
+- Recommendation ranking uses watched titles (including unrated watches), favourites, ratings and repeat watches. Low ratings penalise matching genres, and completed diary history excludes previously watched titles even if they were removed from the library.
+
 - Poster galleries for your custom collections.
 - High/normal/low watchlist priority, searchable personal tags and private notes.
 - Multi-select library organisation: apply watch status, collection membership or favourites to several titles at once.

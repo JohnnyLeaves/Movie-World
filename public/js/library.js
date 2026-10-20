@@ -1,4 +1,4 @@
-import { normalizeLog } from "./insights.js";
+import { normalizeLog,hasWatched } from "./insights.js";
 export const STORAGE_KEY = "movie-world.library.v1";
 export const STATUSES = [
   "planned",
@@ -117,6 +117,8 @@ export function parseLibrary(text) {
     entries[title.key] = {
       title,
       favorite: Boolean(raw.favorite),
+      watched:Boolean(raw.watched||raw.status==='completed'),
+      rewatchQueued:Boolean(raw.rewatchQueued),
       status: raw.status,
       rating,
       notes: String(raw.notes || "").slice(0, 5000),
@@ -173,6 +175,8 @@ export function saveTitle(library, title, patch = {}) {
   const current = library.entries[title.key] || {
     title: validateTitle(title),
     favorite: false,
+    watched:false,
+    rewatchQueued:false,
     status: "planned",
     rating: 0,
     notes: "",
@@ -188,6 +192,7 @@ export function saveTitle(library, title, patch = {}) {
       [title.key]: {
         ...current,
         ...patch,
+        watched:patch.watched ?? (current.watched||current.status==='completed'||patch.status==='completed'),
         title: validateTitle(title),
         updatedAt: new Date().toISOString(),
       },
@@ -246,6 +251,8 @@ export function filterEntries(
   let entries = Object.values(library.entries).filter(
     (e) =>
       (view !== "favorites" || e.favorite) &&
+      (view!=='watched'||hasWatched(library,e.title.key)) &&
+      (view!=='rewatch'||e.rewatchQueued) &&
       (!folder || e.folders.includes(folder)) &&
       (kind === "all" || e.title.kind === kind) &&
       (status === "all" || e.status === status) &&
