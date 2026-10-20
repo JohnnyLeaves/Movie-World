@@ -1,4 +1,4 @@
-import { normalizeLog,hasWatched } from "./insights.js";
+import { normalizeLog, hasWatched } from "./insights.js";
 export const STORAGE_KEY = "movie-world.library.v1";
 export const STATUSES = [
   "planned",
@@ -11,10 +11,11 @@ export const emptyLibrary = () => ({
   version: 1,
   entries: {},
   diary: [],
+  dismissed: {},
   goal: 52,
   folders: [
-    { id: "next-up", name: "Next up" },
-    { id: "mind-benders", name: "Mind-benders" },
+    { id: "next-up", name: "Next up", notes: "" },
+    { id: "mind-benders", name: "Mind-benders", notes: "" },
   ],
 });
 const safeImage = (value) =>
@@ -100,8 +101,25 @@ export function parseLibrary(text) {
     )
       throw new Error("Invalid collection in backup.");
     ids.add(f.id);
-    return { id: f.id, name: f.name.trim() };
+    return {
+      id: f.id,
+      name: f.name.trim(),
+      notes: String(f.notes || "").slice(0, 2000),
+    };
   });
+  if (
+    data.dismissed !== undefined &&
+    (!data.dismissed ||
+      typeof data.dismissed !== "object" ||
+      Array.isArray(data.dismissed) ||
+      Object.keys(data.dismissed).length > 20000)
+  )
+    throw new Error("Invalid not-interested list.");
+  const dismissed = {};
+  for (const raw of Object.values(data.dismissed || {})) {
+    const title = validateTitle(raw);
+    dismissed[title.key] = title;
+  }
   const entries = {};
   for (const raw of Object.values(data.entries)) {
     const title = validateTitle(raw.title),
@@ -117,8 +135,8 @@ export function parseLibrary(text) {
     entries[title.key] = {
       title,
       favorite: Boolean(raw.favorite),
-      watched:Boolean(raw.watched||raw.status==='completed'),
-      rewatchQueued:Boolean(raw.rewatchQueued),
+      watched: Boolean(raw.watched || raw.status === "completed"),
+      rewatchQueued: Boolean(raw.rewatchQueued),
       status: raw.status,
       rating,
       notes: String(raw.notes || "").slice(0, 5000),
@@ -156,6 +174,7 @@ export function parseLibrary(text) {
   return {
     version: 1,
     entries,
+    dismissed,
     folders,
     diary,
     goal:
@@ -175,8 +194,8 @@ export function saveTitle(library, title, patch = {}) {
   const current = library.entries[title.key] || {
     title: validateTitle(title),
     favorite: false,
-    watched:false,
-    rewatchQueued:false,
+    watched: false,
+    rewatchQueued: false,
     status: "planned",
     rating: 0,
     notes: "",
@@ -192,7 +211,11 @@ export function saveTitle(library, title, patch = {}) {
       [title.key]: {
         ...current,
         ...patch,
-        watched:patch.watched ?? (current.watched||current.status==='completed'||patch.status==='completed'),
+        watched:
+          patch.watched ??
+          (current.watched ||
+            current.status === "completed" ||
+            patch.status === "completed"),
         title: validateTitle(title),
         updatedAt: new Date().toISOString(),
       },
@@ -204,7 +227,7 @@ export function removeTitle(library, key) {
   delete entries[key];
   return { ...library, entries };
 }
-export function addFolder(library, name, id = crypto.randomUUID()) {
+export function addFolder(library, name, id = crypto.randomUUID(), notes = "") {
   const clean = name.trim();
   if (!clean || clean.length > 60)
     throw new Error("Use a collection name between 1 and 60 characters.");
@@ -212,7 +235,13 @@ export function addFolder(library, name, id = crypto.randomUUID()) {
     throw new Error("A collection with that name already exists.");
   if (library.folders.length >= 200)
     throw new Error("You can create up to 200 collections.");
-  return { ...library, folders: [...library.folders, { id, name: clean }] };
+  return {
+    ...library,
+    folders: [
+      ...library.folders,
+      { id, name: clean, notes: String(notes).slice(0, 2000) },
+    ],
+  };
 }
 export function deleteFolder(library, id) {
   return {
@@ -226,12 +255,17 @@ export function deleteFolder(library, id) {
     ),
   };
 }
-export function renameFolder(library, id, name) {
+export function renameFolder(
+  library,
+  id,
+  name,
+  notes = library.folders.find((f) => f.id === id)?.notes || "",
+) {
   const without = {
     ...library,
     folders: library.folders.filter((f) => f.id !== id),
   };
-  const checked = addFolder(without, name, id).folders.at(-1);
+  const checked = addFolder(without, name, id, notes).folders.at(-1);
   return {
     ...library,
     folders: library.folders.map((f) => (f.id === id ? checked : f)),
@@ -251,8 +285,8 @@ export function filterEntries(
   let entries = Object.values(library.entries).filter(
     (e) =>
       (view !== "favorites" || e.favorite) &&
-      (view!=='watched'||hasWatched(library,e.title.key)) &&
-      (view!=='rewatch'||e.rewatchQueued) &&
+      (view !== "watched" || hasWatched(library, e.title.key)) &&
+      (view !== "rewatch" || e.rewatchQueued) &&
       (!folder || e.folders.includes(folder)) &&
       (kind === "all" || e.title.kind === kind) &&
       (status === "all" || e.status === status) &&

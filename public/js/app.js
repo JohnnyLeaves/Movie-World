@@ -17,7 +17,13 @@ import {
   detailExtras,
   GENRES,
 } from "./experience.js";
-import { logWatch, pickTonight, today, validDate,hasWatched } from "./insights.js";
+import {
+  logWatch,
+  pickTonight,
+  today,
+  validDate,
+  hasWatched,
+} from "./insights.js";
 import { matchesFilters } from "./catalog-filters.js";
 
 const $ = (s) => document.querySelector(s);
@@ -114,21 +120,36 @@ const availabilityCache = new Map(),
 let seasonNumber = 1,
   recommendationOffset = 0;
 const titleCache = new Map();
-let hideWatched=false;
-try{hideWatched=localStorage.getItem('movie-world.hide-watched')==='true';}catch{}
-const isPersonal = () => ["library", "favorites", "folder",'watched','rewatch'].includes(route);
+let hideWatched = false;
+try {
+  hideWatched = localStorage.getItem("movie-world.hide-watched") === "true";
+} catch {}
+const isPersonal = () =>
+  [
+    "library",
+    "favorites",
+    "folder",
+    "watched",
+    "rewatch",
+    "dismissed",
+  ].includes(route);
 const isExperience = () =>
   ["dashboard", "diary", "collections", "calendar", "recommendations"].includes(
     route,
   );
 const kind = () => (["movie", "tv", "anime"].includes(route) ? route : "all");
+let undoState = null;
 function toast(text) {
-  $("#toast").textContent = text;
+  $("#toast").innerHTML =
+    `<span>${esc(text)}</span>${undoState ? '<button data-action="undo">Undo</button>' : ""}`;
   $("#toast").classList.add("visible");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => $("#toast").classList.remove("visible"), 3500);
+  toastTimer = setTimeout(
+    () => $("#toast").classList.remove("visible"),
+    undoState ? 10000 : 3500,
+  );
 }
-function persist(next) {
+function persist(next, remember = true) {
   if (storageProblem) {
     toast(
       "Resolve the saved-library issue in Settings before changing your library.",
@@ -136,10 +157,14 @@ function persist(next) {
     return false;
   }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    const before = JSON.stringify(library),
+      after = JSON.stringify(next);
+    localStorage.setItem(STORAGE_KEY, after);
+    if (remember && before !== after) undoState = { before, after };
     library = next;
     renderSidebar();
     renderStats();
+    if (remember && undoState) toast("Library updated");
     return true;
   } catch {
     toast(
@@ -147,6 +172,24 @@ function persist(next) {
     );
     return false;
   }
+}
+function undoLastAction() {
+  if (!undoState) return toast("No library action to undo.");
+  if (localStorage.getItem(STORAGE_KEY) !== undoState.after) {
+    undoState = null;
+    return toast(
+      "Your library changed in another tab. Reload before making changes.",
+    );
+  }
+  const previous = parseLibrary(undoState.before);
+  if (!persist(previous, false)) return;
+  undoState = null;
+  selection.clear();
+  renderSidebar();
+  renderMain();
+  if (selected) renderDetail();
+  $("#utility-dialog").close();
+  toast("Last library action undone");
 }
 function shell() {
   $("#app").innerHTML =
@@ -171,7 +214,7 @@ function renderSidebar() {
   const nav = (id, label, ico, count) =>
     `<a href="#${id}" class="nav-link ${route === id ? "active" : ""}" ${route === id ? 'aria-current="page"' : ""}>${icon(ico)}<span>${label}</span>${count !== undefined ? `<span class="nav-count">${count}</span>` : ""}${route === id ? "<i></i>" : ""}</a>`;
   $("#sidebar-nav").innerHTML =
-    `<div class="nav-label">EXPLORE</div><nav aria-label="Explore">${nav("discover", "Discover", "compass")}${nav("movie", "Movies", "film")}${nav("tv", "TV series", "tv")}${nav("anime", "Anime", "anime")}</nav><div class="nav-label">YOUR LIBRARY</div><nav aria-label="Your library">${nav("dashboard", "Overview", "grid")}${nav("library", "All titles", "library", entries.length)}${nav("watched", "Watched", "check", entries.filter(e=>hasWatched(library,e.title.key)).length)}${nav("rewatch", "Rewatch list", "clock", entries.filter(e=>e.rewatchQueued).length)}${nav("diary", "Watch diary", "clock")}${nav("collections", "Collections", "folder")}${nav("calendar", "Calendar", "tv")}${nav("recommendations", "For you", "star")}${nav("favorites", "Favourites", "heart", favorites)}</nav><div class="nav-label collection-label">COLLECTIONS<button data-action="new-folder" class="icon-button" aria-label="Create collection">${icon("plus")}</button></div><nav aria-label="Collections">${library.folders.map((f, i) => `<a href="#folder/${esc(f.id)}" class="nav-link folder-link ${route === "folder" && folderId === f.id ? "active" : ""}" ${route === "folder" && folderId === f.id ? 'aria-current="page"' : ""}><span class="folder-color color-${i % 4}">${icon("folder")}</span><span>${esc(f.name)}</span><span class="nav-count">${entries.filter((e) => e.folders.includes(f.id)).length}</span></a>`).join("")}</nav><button class="create-collection" data-action="new-folder">${icon("plus")} New collection</button><div class="sidebar-note"><span class="tiny-orbit">✦</span><p>Good stories deserve<br/>a place of their own.</p></div>`;
+    `<div class="nav-label">EXPLORE</div><nav aria-label="Explore">${nav("discover", "Discover", "compass")}${nav("movie", "Movies", "film")}${nav("tv", "TV series", "tv")}${nav("anime", "Anime", "anime")}</nav><div class="nav-label">YOUR LIBRARY</div><nav aria-label="Your library">${nav("dashboard", "Overview", "grid")}${nav("library", "All titles", "library", entries.length)}${nav("watched", "Watched", "check", entries.filter((e) => hasWatched(library, e.title.key)).length)}${nav("rewatch", "Rewatch list", "clock", entries.filter((e) => e.rewatchQueued).length)}${nav("diary", "Watch diary", "clock")}${nav("collections", "Collections", "folder")}${nav("calendar", "Calendar", "tv")}${nav("recommendations", "For you", "star")}${nav("favorites", "Favourites", "heart", favorites)}${nav("dismissed", "Not interested", "close", Object.keys(library.dismissed || {}).length)}</nav><button class="create-collection" data-action="undo" ${undoState ? "" : "disabled"}>Undo last action</button><div class="nav-label collection-label">COLLECTIONS<button data-action="new-folder" class="icon-button" aria-label="Create collection">${icon("plus")}</button></div><nav aria-label="Collections">${library.folders.map((f, i) => `<a href="#folder/${esc(f.id)}" class="nav-link folder-link ${route === "folder" && folderId === f.id ? "active" : ""}" ${route === "folder" && folderId === f.id ? 'aria-current="page"' : ""}><span class="folder-color color-${i % 4}">${icon("folder")}</span><span>${esc(f.name)}</span><span class="nav-count">${entries.filter((e) => e.folders.includes(f.id)).length}</span></a>`).join("")}</nav><button class="create-collection" data-action="new-folder">${icon("plus")} New collection</button><div class="sidebar-note"><span class="tiny-orbit">✦</span><p>Good stories deserve<br/>a place of their own.</p></div>`;
   syncNavigation();
 }
 function renderMode() {
@@ -200,7 +243,9 @@ function readRoute() {
     "library",
     "favorites",
     "folder",
-    'watched','rewatch',
+    "watched",
+    "rewatch",
+    "dismissed",
     "dashboard",
     "diary",
     "collections",
@@ -237,7 +282,9 @@ function readRoute() {
           collections: "Collections",
           calendar: "Calendar",
           recommendations: "For you",
-          watched:'Watched',rewatch:'Rewatch list',
+          watched: "Watched",
+          rewatch: "Rewatch list",
+          dismissed: "Not interested",
         }[route];
   load();
 }
@@ -306,26 +353,45 @@ function renderMain() {
   }
   const personal = isPersonal(),
     folder = library.folders.find((f) => f.id === folderId);
-  const rawTitles = personal
-    ? filterEntries(library, {
-        view: route,
-        folder: route === "folder" ? folderId : "",
-        query,
-        kind: libraryKind,
-        status: libraryStatus,
-        sort,
-      })
-        .map((e) => e.title)
-        .filter((t) => matchesFilters(t, discoveryFilters))
-    : catalogData?.results || [];
-  const titles=hideWatched&&!['watched','rewatch'].includes(route)?rawTitles.filter(t=>!hasWatched(library,t.key)):rawTitles;
+  const rawTitles =
+    route === "dismissed"
+      ? Object.values(library.dismissed || {}).filter(
+          (t) =>
+            t.title.toLowerCase().includes(query.toLowerCase()) &&
+            (libraryKind === "all" || t.kind === libraryKind) &&
+            matchesFilters(t, discoveryFilters),
+        )
+      : personal
+        ? filterEntries(library, {
+            view: route,
+            folder: route === "folder" ? folderId : "",
+            query,
+            kind: libraryKind,
+            status: libraryStatus,
+            sort,
+          })
+            .map((e) => e.title)
+            .filter((t) => matchesFilters(t, discoveryFilters))
+        : (catalogData?.results || []).filter(
+            (t) => !library.dismissed?.[t.key],
+          );
+  const titles =
+    hideWatched && !["watched", "rewatch", "dismissed"].includes(route)
+      ? rawTitles.filter((t) => !hasWatched(library, t.key))
+      : rawTitles;
   const discover = route === "discover" && !query && page === 1;
   const heading = personal
     ? route === "folder"
       ? folder?.name || "Collection not found"
       : route === "favorites"
         ? "Your favourites."
-        : route==='watched'?'The stories you have watched.':route==='rewatch'?'Worth another watch.':"Your cinematic archive."
+        : route === "dismissed"
+          ? "Not for your universe."
+          : route === "watched"
+            ? "The stories you have watched."
+            : route === "rewatch"
+              ? "Worth another watch."
+              : "Your cinematic archive."
     : query
       ? `Results for “${query}”`
       : route === "movie"
@@ -336,7 +402,7 @@ function renderMain() {
             ? "Beyond imagination."
             : "Find your next obsession.";
   $("#main").innerHTML =
-    `${discover ? renderHero() + `<nav class="universe-launcher" aria-label="Your universe shortcuts"><a href="#dashboard">${icon("grid")}<span>Your observatory<small>Stats, goals and current watches</small></span>${icon("arrow")}</a><a href="#recommendations">${icon("star")}<span>Made for your taste<small>Find a story that feels like you</small></span>${icon("arrow")}</a><button data-action="tonight">${icon("play")}<span>Tonight, decided<small>One pick from your watchlist</small></span>${icon("arrow")}</button></nav>` : ""}<section class="catalog-section"><div class="section-heading"><div><div class="eyebrow section-eyebrow">${personal ? "PERSONAL COLLECTION" : "THE DISCOVERY FEED"}</div><h2>${esc(heading)}</h2><p>${personal ? "Every world you've entered. Every story still waiting." : mode === "demo" ? "A curated preview of movies, series and anime. Your universe starts here." : route === "discover" ? "Movies, series and anime from TMDB and AniList." : "Explore the live catalogue. Find something worth your time."}</p></div>${personal ? `<div class="heading-actions">${route === "folder" && folder ? `<button class="icon-button bordered" data-action="rename-folder" aria-label="Rename collection">${icon("edit")}</button><button class="icon-button bordered" data-action="delete-folder" aria-label="Delete collection">${icon("trash")}</button>` : ""}<button class="button secondary" data-action="export">${icon("download")} Export library</button></div>` : `<button class="button secondary" data-action="tonight">${icon("play")} Pick tonight</button>`}</div>
+    `${discover ? (library.dismissed?.["tmdb:movie:335984"] ? "" : renderHero()) + `<nav class="universe-launcher" aria-label="Your universe shortcuts"><a href="#dashboard">${icon("grid")}<span>Your observatory<small>Stats, goals and current watches</small></span>${icon("arrow")}</a><a href="#recommendations">${icon("star")}<span>Made for your taste<small>Find a story that feels like you</small></span>${icon("arrow")}</a><button data-action="tonight">${icon("play")}<span>Tonight, decided<small>One pick from your watchlist</small></span>${icon("arrow")}</button></nav>` : ""}<section class="catalog-section"><div class="section-heading"><div><div class="eyebrow section-eyebrow">${personal ? "PERSONAL COLLECTION" : "THE DISCOVERY FEED"}</div><h2>${esc(heading)}</h2><p>${personal ? (route === "folder" && folder?.notes ? esc(folder.notes) : route === "dismissed" ? "Hidden from discovery and recommendations. Restore a title whenever you change your mind." : "Every world you've entered. Every story still waiting.") : mode === "demo" ? "A curated preview of movies, series and anime. Your universe starts here." : route === "discover" ? "Movies, series and anime from TMDB and AniList." : "Explore the live catalogue. Find something worth your time."}</p></div>${personal ? `<div class="heading-actions">${route === "folder" && folder ? `<button class="icon-button bordered" data-action="rename-folder" aria-label="Edit collection">${icon("edit")}</button><button class="icon-button bordered" data-action="delete-folder" aria-label="Delete collection">${icon("trash")}</button>` : ""}<button class="button secondary" data-action="export">${icon("download")} Export library</button></div>` : `<button class="button secondary" data-action="tonight">${icon("play")} Pick tonight</button>`}</div>
   ${storageProblem ? `<div class="notice warning">${esc(storageProblem)}</div>` : ""}
   ${!personal ? `<div class="mode-banner"><span>${icon(mode === "demo" ? "compass" : "globe")} ${mode === "demo" ? "You’re exploring the demo. Connect TMDB for the full movie & TV catalogue. Anime needs no key." : "Live catalogue enabled. Your personal library stays on this browser."}</span><button data-action="${mode === "demo" ? "settings" : "toggle-mode"}">${mode === "demo" ? "Connect catalogue" : "Use demo"} ${icon("arrow")}</button></div>` : ""}
   <div class="catalog-toolbar">${
@@ -381,7 +447,7 @@ function renderMain() {
     )
     .join("")}</select></div></div>
   ${filterBar({ filters: discoveryFilters, esc, query, route, mode: personal ? "demo" : mode })}
-  ${!["watched","rewatch"].includes(route)?`<label class="hide-watched-control"><input type="checkbox" id="hide-watched" ${hideWatched?"checked":""}/> Hide watched titles <small>Filters this results page using your viewing history</small></label>`:""}<div class="view-toolbar"><span>${personal ? "YOUR PERSONAL ARCHIVE" : "EXPLORE THE CATALOGUE"}</span><div>${personal ? `<button class="button secondary" data-action="toggle-selection">${icon("check")} ${selectionMode ? "Done selecting" : "Select titles"}</button>` : ""}<button class="icon-button ${viewMode === "grid" ? "selected-view" : ""}" data-action="grid-view" aria-label="Grid view" aria-pressed="${viewMode === "grid"}">${icon("grid")}</button><button class="icon-button ${viewMode === "list" ? "selected-view" : ""}" data-action="list-view" aria-label="List view" aria-pressed="${viewMode === "list"}">${icon("menu")}</button></div></div>
+  ${!["watched", "rewatch"].includes(route) ? `<label class="hide-watched-control"><input type="checkbox" id="hide-watched" ${hideWatched ? "checked" : ""}/> Hide watched titles <small>Filters this results page using your viewing history</small></label>` : ""}<div class="view-toolbar"><span>${personal ? "YOUR PERSONAL ARCHIVE" : "EXPLORE THE CATALOGUE"}</span><div>${personal ? `<button class="button secondary" data-action="toggle-selection">${icon("check")} ${selectionMode ? "Done selecting" : "Select titles"}</button>` : ""}<button class="icon-button ${viewMode === "grid" ? "selected-view" : ""}" data-action="grid-view" aria-label="Grid view" aria-pressed="${viewMode === "grid"}">${icon("grid")}</button><button class="icon-button ${viewMode === "list" ? "selected-view" : ""}" data-action="list-view" aria-label="List view" aria-pressed="${viewMode === "list"}">${icon("menu")}</button></div></div>
   ${selectionMode ? `<div class="bulk-toolbar"><span>${selection.size} selected</span><button data-action="select-visible">Select visible</button><button class="button primary" data-action="bulk-edit" ${selection.size ? "" : "disabled"}>Organise selected ${icon("folder")}</button></div>` : ""}
   ${catalogData?.warning ? `<div class="notice warning">${esc(catalogData.warning)}</div>` : ""}
   ${error ? `<div class="empty-state error-state">${icon("globe")}<h3>Connection interrupted</h3><p>${esc(error)}</p><div><button class="button primary" data-action="retry">Try again</button><button class="button secondary" data-action="toggle-mode">${mode === "live" ? "Explore demo" : "Use live catalogue"}</button></div></div>` : loading ? `<div class="title-grid skeleton-grid" aria-label="Loading titles" aria-busy="true">${Array.from({ length: 6 }, () => '<div class="skeleton-card"><div></div><span></span><small></small></div>').join("")}</div>` : titles.length ? `<div class="title-grid">${titles.map(card).join("")}</div>` : `<div class="empty-state">${icon(personal ? "library" : "search")}<span class="eyebrow">THE NEXT CHAPTER IS YOURS</span><h3>${personal ? "Make this space your own." : "No titles found."}</h3><p>${personal ? (query || libraryStatus !== "all" || libraryKind !== "all" ? "Try changing your filters or search." : "Save a title, tap a heart, or add something to a collection. Your story starts with a discovery.") : "Try a different title or switch content type."}</p><a href="#discover" class="button primary">Explore titles ${icon("arrow")}</a></div>`}
@@ -417,6 +483,13 @@ function decorateCards() {
         t = titleCache.get(key),
         e = library.entries[key];
       if (!t) return;
+      if (route === "dismissed" && article.closest("#main")) {
+        article.insertAdjacentHTML(
+          "beforeend",
+          `<button class="button secondary" data-action="restore-title" data-key="${esc(key)}">Restore title</button>`,
+        );
+        return;
+      }
       const wrap = article.querySelector(".poster-wrap");
       wrap.insertAdjacentHTML(
         "beforeend",
@@ -431,15 +504,15 @@ function decorateCards() {
       }
       article.insertAdjacentHTML(
         "beforeend",
-        `<div class="watch-card-actions"><button class="${hasWatched(library,key)?'has-watched':''}" data-action="mark-watched" data-key="${esc(key)}" ${hasWatched(library,key)?'disabled':''}>${icon('check')} ${hasWatched(library,key)?'Watched':'Mark watched'}</button>${hasWatched(library,key)?`<button class="${e?.rewatchQueued?'queued':''}" data-action="queue-rewatch" data-key="${esc(key)}" aria-pressed="${Boolean(e?.rewatchQueued)}">${icon('clock')} ${e?.rewatchQueued?'In rewatch list':'Rewatch'}</button>`:''}</div>`+
-        `<p class="list-synopsis">${esc(t.overview.slice(0, 210))}</p>${e?.priority === "high" ? '<span class="priority-badge">HIGH PRIORITY</span>' : ""}${
-          e?.tags?.length
-            ? `<div class="entry-tags">${e.tags
-                .slice(0, 3)
-                .map((tag) => `<span>${esc(tag)}</span>`)
-                .join("")}</div>`
-            : ""
-        }`,
+        `<div class="watch-card-actions"><button data-action="dismiss-title" data-key="${esc(key)}">Not interested</button><button class="${hasWatched(library, key) ? "has-watched" : ""}" data-action="mark-watched" data-key="${esc(key)}" ${hasWatched(library, key) ? "disabled" : ""}>${icon("check")} ${hasWatched(library, key) ? "Watched" : "Mark watched"}</button>${hasWatched(library, key) ? `<button class="${e?.rewatchQueued ? "queued" : ""}" data-action="queue-rewatch" data-key="${esc(key)}" aria-pressed="${Boolean(e?.rewatchQueued)}">${icon("clock")} ${e?.rewatchQueued ? "In rewatch list" : "Rewatch"}</button>` : ""}</div>` +
+          `<p class="list-synopsis">${esc(t.overview.slice(0, 210))}</p>${e?.priority === "high" ? '<span class="priority-badge">HIGH PRIORITY</span>' : ""}${
+            e?.tags?.length
+              ? `<div class="entry-tags">${e.tags
+                  .slice(0, 3)
+                  .map((tag) => `<span>${esc(tag)}</span>`)
+                  .join("")}</div>`
+              : ""
+          }`,
       );
     });
 }
@@ -462,7 +535,7 @@ function logDialog(title = selected) {
       .map((n) => `<option value="${n}">${n.toFixed(1)}</option>`)
       .join(
         "",
-      )}</select></label></div><label class="log-rewatch"><input name="rewatch" type="checkbox" ${hasWatched(library,title.key)?"checked":""}/> This was a rewatch</label><label>What stayed with you?<textarea name="notes" rows="3" maxlength="2000" placeholder="A private thought for your diary..."></textarea></label><p class="small-print">Logging a finished title marks it completed. For individual episodes, use Log next episode.</p><p id="watch-log-error" class="form-error" role="alert"></p><button class="button primary" type="submit">${icon("check")} Save to watch diary</button></form>`,
+      )}</select></label></div><label class="log-rewatch"><input name="rewatch" type="checkbox" ${hasWatched(library, title.key) ? "checked" : ""}/> This was a rewatch</label><label>What stayed with you?<textarea name="notes" rows="3" maxlength="2000" placeholder="A private thought for your diary..."></textarea></label><p class="small-print">Logging a finished title marks it completed. For individual episodes, use Log next episode.</p><p id="watch-log-error" class="form-error" role="alert"></p><button class="button primary" type="submit">${icon("check")} Save to watch diary</button></form>`,
     "Log a watch",
   );
 }
@@ -642,15 +715,24 @@ function renderDetail() {
     body.insertAdjacentHTML(
       "beforeend",
       detailExtras({
-        title: t,
+        title: {
+          ...t,
+          recommendations: (t.recommendations || []).filter(
+            (r) => !library.dismissed?.[r.key],
+          ),
+        },
         entry: e,
-        watched:hasWatched(library,t.key),
+        watched: hasWatched(library, t.key),
         esc,
         icon,
         card,
         region: watchRegion,
       }),
     );
+  body?.insertAdjacentHTML(
+    "beforeend",
+    `<div class="watch-detail-actions"><button class="button secondary" data-action="${library.dismissed?.[t.key] ? "restore-title" : "dismiss-title"}" data-key="${esc(t.key)}">${library.dismissed?.[t.key] ? "Restore title" : "Not interested"}</button>${undoState ? '<button class="button secondary" data-action="undo">Undo last action</button>' : ""}</div>`,
+  );
   $("#detail-dialog").scrollTop = oldScroll;
   if (focusId && $("#detail-dialog").open)
     document.getElementById(focusId)?.focus({ preventScroll: true });
@@ -660,13 +742,13 @@ function renderDetail() {
 function utility(html, label) {
   const d = $("#utility-dialog");
   d.setAttribute("aria-label", label);
-  d.innerHTML = `<button class="icon-button utility-close" data-action="close-utility" aria-label="Close dialog">${icon("close")}</button>${html}`;
+  d.innerHTML = `<button class="icon-button utility-close" data-action="close-utility" aria-label="Close dialog">${icon("close")}</button>${html}${undoState ? '<button class="button secondary dialog-undo" data-action="undo">Undo last action</button>' : ""}`;
   if (!d.open) d.showModal();
 }
 function folderDialog(rename = false) {
   const folder = library.folders.find((f) => f.id === folderId);
   utility(
-    `<div class="eyebrow">A HOME FOR YOUR STORIES</div><h2>${rename ? "Rename collection" : "Create a collection"}</h2><p>Group your titles by mood, genre, or whatever makes sense to you.</p><form id="folder-form" data-rename="${rename ? "true" : "false"}"><label for="folder-name">Collection name</label><input id="folder-name" name="name" required maxlength="60" placeholder="e.g. Neon nights" value="${rename ? esc(folder?.name) : ""}"/><p id="folder-error" class="form-error" role="alert"></p><button class="button primary" type="submit">${icon("folder")} ${rename ? "Save name" : "Create collection"}</button></form>`,
+    `<div class="eyebrow">A HOME FOR YOUR STORIES</div><h2>${rename ? "Edit collection" : "Create a collection"}</h2><p>Group your titles by mood, genre, or whatever makes sense to you.</p><form id="folder-form" data-rename="${rename ? "true" : "false"}"><label for="folder-name">Collection name</label><input id="folder-name" name="name" required maxlength="60" placeholder="e.g. Neon nights" value="${rename ? esc(folder?.name) : ""}"/><label for="folder-notes">Collection notes</label><textarea id="folder-notes" name="notes" rows="3" maxlength="2000" placeholder="Watch together, viewing order, or a theme for this collection.">${rename ? esc(folder?.notes || "") : ""}</textarea><p id="folder-error" class="form-error" role="alert"></p><button class="button primary" type="submit">${icon("folder")} ${rename ? "Save collection" : "Create collection"}</button></form>`,
     "Collection",
   );
   setTimeout(() => $("#folder-name")?.focus(), 0);
@@ -704,14 +786,61 @@ document.addEventListener("click", async (event) => {
   const action = button.dataset.action,
     key = button.dataset.key,
     title = titleCache.get(key) || library.entries[key]?.title;
-  if (action === "tonight") return tonightDialog();
-  if(action==='mark-watched'){
-    const t=title || selected;if(!t||hasWatched(library,t.key))return;
-    if(persist(saveTitle(library,t,{status:'completed',watched:true,...(t.episodes?{progress:t.episodes}:{})}))){renderMain();if(selected)renderDetail();toast('Marked as watched. Use Log a watch to record a date or rewatch.');}return;
+  if (action === "undo") return undoLastAction();
+  if (action === "dismiss-title" || action === "restore-title") {
+    const t = title || library.dismissed?.[key] || selected;
+    if (!t) return;
+    flushNotes();
+    const dismissed = { ...(library.dismissed || {}) };
+    if (action === "dismiss-title") {
+      if (!dismissed[t.key] && Object.keys(dismissed).length >= 20000)
+        return toast("Your not-interested list is full.");
+      dismissed[t.key] = validateTitle(t);
+    } else delete dismissed[t.key];
+    if (persist({ ...library, dismissed })) {
+      renderMain();
+      if (selected) renderDetail();
+      toast(
+        action === "dismiss-title"
+          ? "Hidden from discovery and recommendations"
+          : "Title restored to discovery",
+      );
+    }
+    return;
   }
-  if(action==='queue-rewatch'){
-    const t=title || selected;if(!t)return;const queued=!library.entries[t.key]?.rewatchQueued;
-    if(persist(saveTitle(library,t,{rewatchQueued:queued}))){renderMain();if(selected)renderDetail();toast(queued?'Added to your rewatch list':'Removed from your rewatch list');}return;
+  if (action === "tonight") return tonightDialog();
+  if (action === "mark-watched") {
+    const t = title || selected;
+    if (!t || hasWatched(library, t.key)) return;
+    if (
+      persist(
+        saveTitle(library, t, {
+          status: "completed",
+          watched: true,
+          ...(t.episodes ? { progress: t.episodes } : {}),
+        }),
+      )
+    ) {
+      renderMain();
+      if (selected) renderDetail();
+      toast("Marked as watched. Use Log a watch to record a date or rewatch.");
+    }
+    return;
+  }
+  if (action === "queue-rewatch") {
+    const t = title || selected;
+    if (!t) return;
+    const queued = !library.entries[t.key]?.rewatchQueued;
+    if (persist(saveTitle(library, t, { rewatchQueued: queued }))) {
+      renderMain();
+      if (selected) renderDetail();
+      toast(
+        queued
+          ? "Added to your rewatch list"
+          : "Removed from your rewatch list",
+      );
+    }
+    return;
   }
   if (action === "log-watch") return logDialog();
   if (action === "card-save" && title) {
@@ -1014,7 +1143,13 @@ document.addEventListener("input", (event) => {
 });
 document.addEventListener("change", async (event) => {
   const el = event.target;
-  if(el.id==='hide-watched'){hideWatched=el.checked;try{localStorage.setItem('movie-world.hide-watched',String(hideWatched));}catch{}return renderMain();}
+  if (el.id === "hide-watched") {
+    hideWatched = el.checked;
+    try {
+      localStorage.setItem("movie-world.hide-watched", String(hideWatched));
+    } catch {}
+    return renderMain();
+  }
   if (
     el.id === "discovery-genre" ||
     el.id === "discovery-year" ||
@@ -1215,14 +1350,14 @@ document.addEventListener("submit", (event) => {
     const rename = event.target.dataset.rename === "true",
       name = $("#folder-name").value;
     const next = rename
-      ? renameFolder(library, folderId, name)
-      : addFolder(library, name);
+      ? renameFolder(library, folderId, name, $("#folder-notes").value)
+      : addFolder(library, name, undefined, $("#folder-notes").value);
     if (persist(next)) {
       $("#utility-dialog").close();
       if (selected && $("#detail-dialog").open) renderDetail();
       renderMain();
       if (rename) $("#breadcrumb").textContent = name.trim();
-      toast(rename ? "Collection renamed" : "Collection created");
+      toast(rename ? "Collection updated" : "Collection created");
     }
   } catch (e) {
     $("#folder-error").textContent = e.message;
@@ -1267,6 +1402,8 @@ window.addEventListener("hashchange", readRoute);
 matchMedia("(max-width: 620px)").addEventListener("change", syncNavigation);
 window.addEventListener("storage", (event) => {
   if (event.key !== STORAGE_KEY) return;
+  undoState = null;
+  $("#toast").classList.remove("visible");
   try {
     library = event.newValue ? parseLibrary(event.newValue) : emptyLibrary();
     renderSidebar();

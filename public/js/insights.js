@@ -109,8 +109,8 @@ export function logWatch(
       [title.key]: {
         ...entry,
         status: completed ? "completed" : "watching",
-        watched:completed || entry.watched || entry.status==='completed',
-        rewatchQueued:completed?false:entry.rewatchQueued,
+        watched: completed || entry.watched || entry.status === "completed",
+        rewatchQueued: completed ? false : entry.rewatchQueued,
         progress: nextProgress,
         rating: rating || entry.rating,
         updatedAt: new Date().toISOString(),
@@ -162,36 +162,57 @@ export function getStats(library, year = new Date().getFullYear()) {
     recent: [...logs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6),
   };
 }
-export function hasWatched(library,key) {
-  const entry=library.entries[key];
-  return Boolean(entry?.watched||entry?.status==='completed'||(library.diary || []).some(log=>log.key===key&&(log.type==='finish'||log.completed)));
+export function hasWatched(library, key) {
+  const entry = library.entries[key];
+  return Boolean(
+    entry?.watched ||
+      entry?.status === "completed" ||
+      (library.diary || []).some(
+        (log) => log.key === key && (log.type === "finish" || log.completed),
+      ),
+  );
 }
 export function recommendTitles(library, candidates, limit = 12) {
   const weights = new Map();
-  let watchedSeed=false,enjoyedSeed=false;
+  let watchedSeed = false,
+    enjoyedSeed = false;
   for (const entry of Object.values(library.entries)) {
-    const watched=hasWatched(library,entry.title.key);
-    if(!watched&&!entry.favorite&&!entry.rating)continue;
-    const finishes=(library.diary || []).filter(log=>log.key===entry.title.key&&(log.type==='finish'||log.completed)).length;
-    let weight=(watched?0.6:0)+(entry.favorite?3:0)+(entry.rating?(entry.rating-5)/2:0);
-    if(weight>0&&entry.rating>=5)weight+=Math.min(1.5,Math.max(0,finishes-1)*0.5);
+    if (library.dismissed?.[entry.title.key]) continue;
+    const watched = hasWatched(library, entry.title.key);
+    if (!watched && !entry.favorite && !entry.rating) continue;
+    const finishes = (library.diary || []).filter(
+      (log) =>
+        log.key === entry.title.key && (log.type === "finish" || log.completed),
+    ).length;
+    let weight =
+      (watched ? 0.6 : 0) +
+      (entry.favorite ? 3 : 0) +
+      (entry.rating ? (entry.rating - 5) / 2 : 0);
+    if (weight > 0 && entry.rating >= 5)
+      weight += Math.min(1.5, Math.max(0, finishes - 1) * 0.5);
     watchedSeed ||= watched;
-    enjoyedSeed ||= watched&&(entry.favorite||entry.rating>=7.5);
-    for(const genre of entry.title.genres)weights.set(genre,(weights.get(genre)||0)+weight);
+    enjoyedSeed ||= watched && (entry.favorite || entry.rating >= 7.5);
+    for (const genre of entry.title.genres)
+      weights.set(genre, (weights.get(genre) || 0) + weight);
   }
   return candidates
-    .filter((t) => !library.entries[t.key]&&!hasWatched(library,t.key))
+    .filter(
+      (t) =>
+        !library.dismissed?.[t.key] &&
+        !library.entries[t.key] &&
+        !hasWatched(library, t.key),
+    )
     .map((t) => {
       const matched = t.genres
-        .filter((g) => (weights.get(g)||0)>0)
+        .filter((g) => (weights.get(g) || 0) > 0)
         .sort((a, b) => weights.get(b) - weights.get(a));
       return {
         title: t,
         affinity:
-          t.genres.reduce((sum, g) => sum + (weights.get(g)||0), 0) +
+          t.genres.reduce((sum, g) => sum + (weights.get(g) || 0), 0) +
           (t.score || 0) / 3,
         reason: matched.length
-          ? `${watchedSeed?(enjoyedSeed?'Based on watched titles you enjoyed':'Similar to genres you have watched'):'Because you enjoy'}: ${matched.slice(0, 2).join(" and ")}`
+          ? `${watchedSeed ? (enjoyedSeed ? "Based on watched titles you enjoyed" : "Similar to genres you have watched") : "Because you enjoy"}: ${matched.slice(0, 2).join(" and ")}`
           : "A highly rated discovery to start your profile",
       };
     })
@@ -204,6 +225,7 @@ export function pickTonight(
 ) {
   const choices = Object.values(library.entries).filter(
     (e) =>
+      !library.dismissed?.[e.title.key] &&
       ["planned", "on-hold"].includes(e.status) &&
       (kind === "all" || e.title.kind === kind) &&
       (!genre || e.title.genres.includes(genre)) &&

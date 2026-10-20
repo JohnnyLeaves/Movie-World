@@ -1,11 +1,11 @@
 import { matchesFilters } from "./js/catalog-filters.js";
-const CACHE = "movie-world-v2";
+const CACHE = "movie-world-v3";
 const SHELL = [
   "/",
   "/index.html",
   "/styles.css",
   "/experience.css",
-  '/watch.css',
+  "/watch.css",
   "/manifest.webmanifest",
   "/assets/icon.svg",
   "/assets/tmdb.svg",

@@ -1,3 +1,10 @@
+# Small library improvements
+
+- Added reversible Not interested filtering, a restore list and exclusion from taste signals and tonight picks.
+- Added single-step undo for saved library changes, with a storage check to protect updates from other tabs.
+- Added collection notes, escaped display, backward-compatible backup migration and import limits.
+- Updated the offline shell cache and added regression coverage for dismissal, restore, undo, collection deletion and note persistence.
+
 # Movie World v2.0
 
 ## Added

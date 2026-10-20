@@ -35,6 +35,11 @@ Open **http://127.0.0.1:3000**. No install step, build step, database or API key
 
 ### Build a library worth keeping
 
+- **Not interested** hides a title from discovery, related recommendations and the tonight picker. Restore it from the sidebar list; ratings and watch history stay intact. Hidden titles do not contribute taste signals. Filtering uses canonical provider IDs on the loaded page.
+- **Undo last action** restores the most recent library change, including removals, diary logs, bulk changes and collection edits. Use the toast or sidebar; one undo is kept in memory until another change or page reload. Undo refuses to overwrite a newer update from another tab.
+- **Collection notes** hold up to 2,000 characters for themes, viewing order or shared movie-night plans. Add them when creating or editing a collection; notes appear in its gallery tile and page and survive backup imports.
+
+
 - One-click **Mark watched** controls on title cards and title pages, plus a dedicated **Watched** section.
 - A persistent **Hide watched titles** switch for discovery and library results. It filters the loaded page against saved status and completion history.
 - A **Rewatch list** for titles you want to revisit. Logging a completed rewatch clears its queue flag while retaining previous diary records.

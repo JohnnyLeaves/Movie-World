@@ -107,7 +107,11 @@ export function renderExperience({
         `<button class="button primary" data-action="new-folder">${icon("plus")} Create collection</button>`,
       ) +
       `<div class="collection-gallery">${library.folders
-        .filter((f) => f.name.toLowerCase().includes(query.toLowerCase()))
+        .filter((f) =>
+          `${f.name} ${f.notes || ""}`
+            .toLowerCase()
+            .includes(query.toLowerCase()),
+        )
         .map((folder, i) => {
           const items = entries.filter((e) => e.folders.includes(folder.id));
           return `<a class="collection-tile collection-tint-${i % 4}" href="#folder/${esc(folder.id)}"><div class="collection-art">${
@@ -118,7 +122,7 @@ export function renderExperience({
                   `<img src="${esc(e.title.poster)}" alt="" loading="lazy"/>`,
               )
               .join("") || `<span>${icon("folder")}</span>`
-          }</div><div><h2>${esc(folder.name)}</h2><span>${items.length} titles &middot; ${items.filter((e) => e.status === "completed").length} completed</span>${icon("arrow")}</div></a>`;
+          }</div><div><h2>${esc(folder.name)}</h2>${folder.notes ? `<p class="collection-notes">${esc(folder.notes)}</p>` : ""}<span>${items.length} titles &middot; ${items.filter((e) => e.status === "completed").length} completed</span>${icon("arrow")}</div></a>`;
         })
         .join(
           "",
@@ -182,8 +186,16 @@ export function renderExperience({
   }
   return `<section class="catalog-section experience-page">${content}</section>`;
 }
-export function detailExtras({ title, entry, esc, icon, card, region = "PT",watched=false }) {
-  return `<section class="detail-tools"><div class="watch-detail-actions"><button class="button ${watched?"secondary":"primary"}" data-action="mark-watched" ${watched?"disabled":""}>${icon("check")} ${watched?"Watched":"Mark as watched"}</button>${watched?`<button class="button secondary" data-action="queue-rewatch" aria-pressed="${Boolean(entry?.rewatchQueued)}">${icon("clock")} ${entry?.rewatchQueued?"Remove from rewatch list":"Want to rewatch"}</button>`:""}</div><div class="panel-heading"><h3>Make it yours</h3><button class="button primary" data-action="log-watch">${icon("check")} Log a watch</button></div><div class="personal-fields"><label>Watchlist priority<select id="detail-priority">${["low", "normal", "high"].map((v) => `<option value="${v}" ${(entry?.priority || "normal") === v ? "selected" : ""}>${v[0].toUpperCase() + v.slice(1)}</option>`).join("")}</select></label><label>Personal tags<input id="detail-tags" maxlength="250" value="${esc(entry?.tags?.join(", ") || "")}" placeholder="comfort watch, mind-bending"/></label></div>${title.kind !== "movie" ? `<div class="episode-controls"><span>${entry?.progress || 0}${title.episodes ? ` / ${title.episodes}` : ""} episodes watched</span><button class="button secondary" data-action="next-episode">${icon("plus")} Log next episode</button></div>` : ""}</section>
+export function detailExtras({
+  title,
+  entry,
+  esc,
+  icon,
+  card,
+  region = "PT",
+  watched = false,
+}) {
+  return `<section class="detail-tools"><div class="watch-detail-actions"><button class="button ${watched ? "secondary" : "primary"}" data-action="mark-watched" ${watched ? "disabled" : ""}>${icon("check")} ${watched ? "Watched" : "Mark as watched"}</button>${watched ? `<button class="button secondary" data-action="queue-rewatch" aria-pressed="${Boolean(entry?.rewatchQueued)}">${icon("clock")} ${entry?.rewatchQueued ? "Remove from rewatch list" : "Want to rewatch"}</button>` : ""}</div><div class="panel-heading"><h3>Make it yours</h3><button class="button primary" data-action="log-watch">${icon("check")} Log a watch</button></div><div class="personal-fields"><label>Watchlist priority<select id="detail-priority">${["low", "normal", "high"].map((v) => `<option value="${v}" ${(entry?.priority || "normal") === v ? "selected" : ""}>${v[0].toUpperCase() + v.slice(1)}</option>`).join("")}</select></label><label>Personal tags<input id="detail-tags" maxlength="250" value="${esc(entry?.tags?.join(", ") || "")}" placeholder="comfort watch, mind-bending"/></label></div>${title.kind !== "movie" ? `<div class="episode-controls"><span>${entry?.progress || 0}${title.episodes ? ` / ${title.episodes}` : ""} episodes watched</span><button class="button secondary" data-action="next-episode">${icon("plus")} Log next episode</button></div>` : ""}</section>
   ${
     title.source === "tmdb"
       ? `<section class="feature-panel availability-section"><div class="panel-heading"><h3>Where to watch</h3><label class="sr-only" for="watch-region">Streaming region</label><select id="watch-region">${[

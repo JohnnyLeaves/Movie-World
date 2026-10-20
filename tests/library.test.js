@@ -77,3 +77,38 @@ test("personal library filtering is case insensitive and supports media type and
   lib = removeTitle(lib, demoTitles[0].key);
   assert.equal(Object.keys(lib.entries).length, 1);
 });
+
+test("collection notes migrate, survive renaming and are bounded in backups", () => {
+  let lib = addFolder(
+    emptyLibrary(),
+    "Movie night",
+    "night",
+    "Watch together\nStart with the original.",
+  );
+  lib = renameFolder(lib, "night", "Friday night");
+  assert.equal(
+    lib.folders.at(-1).notes,
+    "Watch together\nStart with the original.",
+  );
+  assert.deepEqual(parseLibrary(JSON.stringify(lib)), lib);
+  const old = emptyLibrary();
+  delete old.dismissed;
+  delete old.folders[0].notes;
+  const migrated = parseLibrary(JSON.stringify(old));
+  assert.deepEqual(migrated.dismissed, {});
+  assert.equal(migrated.folders[0].notes, "");
+  old.folders[0].notes = "a".repeat(3000);
+  assert.equal(parseLibrary(JSON.stringify(old)).folders[0].notes.length, 2000);
+});
+test("not-interested backups preserve canonical identity without saving a watch status", () => {
+  const lib = emptyLibrary();
+  const title = demoTitles[0];
+  lib.dismissed[title.key] = title;
+  const restored = parseLibrary(JSON.stringify(lib));
+  assert.equal(restored.dismissed[title.key].key, title.key);
+  assert.equal(Object.keys(restored.entries).length, 0);
+  assert.throws(
+    () => parseLibrary(JSON.stringify({ ...lib, dismissed: [] })),
+    /not-interested/,
+  );
+});

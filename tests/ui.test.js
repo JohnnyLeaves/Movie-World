@@ -172,15 +172,121 @@ test("app interactions: discovery filters, diary, goals, collections, bulk edit 
   assert.ok(doc.querySelectorAll(".calendar-day").length >= 28);
   await navigate("recommendations");
   assert.ok(doc.querySelector(".recommendation-grid .title-card"));
-  await navigate('watched');assert.equal(doc.querySelectorAll('#main .title-card').length,1);
+
+  // Dismissal is independent of library history and can be undone or restored later.
+  await navigate("discover");
+  const state = () =>
+    JSON.parse(window.localStorage.getItem("movie-world.library.v1"));
+  click('#main [data-action="dismiss-title"][data-key="tmdb:movie:335984"]');
+  assert.ok(state().dismissed["tmdb:movie:335984"]);
+  assert.equal(state().diary.length, 1);
+  assert.equal(state().entries["tmdb:movie:335984"].status, "completed");
+  assert.equal(
+    doc.querySelector(
+      '#main [data-action="detail"][data-key="tmdb:movie:335984"]',
+    ),
+    null,
+  );
+  click('#toast [data-action="undo"]');
+  assert.equal(state().dismissed["tmdb:movie:335984"], undefined);
+  click('#main [data-action="dismiss-title"][data-key="tmdb:movie:27205"]');
+  await navigate("dismissed");
+  assert.equal(doc.querySelectorAll("#main .title-card").length, 1);
+  click('#main [data-action="restore-title"]');
+  assert.equal(Object.keys(state().dismissed).length, 0);
+  await navigate("folder/next-up");
+  click('[data-action="rename-folder"]');
+  doc.querySelector("#folder-notes").value =
+    "Watch together\nNo spoilers <script>bad</script>";
+  submit("#folder-form");
+  assert.equal(
+    state().folders[0].notes,
+    "Watch together\nNo spoilers <script>bad</script>",
+  );
+  assert.match(
+    doc.querySelector(".section-heading").textContent,
+    /No spoilers/,
+  );
+  assert.equal(doc.querySelector("#main script"), null);
+  await navigate("collections");
+  assert.match(
+    doc.querySelector(".collection-notes").textContent,
+    /Watch together/,
+  );
+  click('#toast [data-action="undo"]');
+  assert.equal(state().folders[0].notes, "");
+  await navigate("watched");
+  assert.equal(doc.querySelectorAll("#main .title-card").length, 1);
   click('[data-action="queue-rewatch"][data-key="tmdb:movie:335984"]');
-  await navigate('rewatch');assert.equal(doc.querySelectorAll('#main .title-card').length,1);
-  await navigate('discover');
-  let hide=doc.querySelector('#hide-watched');hide.checked=true;hide.dispatchEvent(new window.Event('change',{bubbles:true}));
-  assert.equal(doc.querySelectorAll('#main .title-card').length,23);
-  assert.equal(doc.querySelector('#main [data-action="detail"][data-key="tmdb:movie:335984"]'),null);
-  hide=doc.querySelector('#hide-watched');hide.checked=false;hide.dispatchEvent(new window.Event('change',{bubbles:true}));
+  await navigate("rewatch");
+  assert.equal(doc.querySelectorAll("#main .title-card").length, 1);
+  await navigate("discover");
+  let hide = doc.querySelector("#hide-watched");
+  hide.checked = true;
+  hide.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(doc.querySelectorAll("#main .title-card").length, 23);
+  assert.equal(
+    doc.querySelector(
+      '#main [data-action="detail"][data-key="tmdb:movie:335984"]',
+    ),
+    null,
+  );
+  hide = doc.querySelector("#hide-watched");
+  hide.checked = false;
+  hide.dispatchEvent(new window.Event("change", { bubbles: true }));
   click('[data-action="mark-watched"][data-key="tmdb:movie:27205"]');
-  assert.equal(JSON.parse(window.localStorage.getItem('movie-world.library.v1')).entries['tmdb:movie:27205'].watched,true);
-  assert.equal(JSON.parse(window.localStorage.getItem('movie-world.library.v1')).diary.length,1,'Marking watched must not invent a watch date');
+  assert.equal(
+    JSON.parse(window.localStorage.getItem("movie-world.library.v1")).entries[
+      "tmdb:movie:27205"
+    ].watched,
+    true,
+  );
+  assert.equal(
+    JSON.parse(window.localStorage.getItem("movie-world.library.v1")).diary
+      .length,
+    1,
+    "Marking watched must not invent a watch date",
+  );
+  click('#toast [data-action="undo"]');
+  assert.equal(state().entries["tmdb:movie:27205"], undefined);
+  click('#main [data-action="favorite"][data-key="tmdb:movie:27205"]');
+  click('#main [data-action="queue-rewatch"][data-key="tmdb:movie:335984"]');
+  click('#toast [data-action="undo"]');
+  assert.equal(
+    state().entries["tmdb:movie:27205"].favorite,
+    true,
+    "Undo only reverses the latest action",
+  );
+  assert.equal(state().entries["tmdb:movie:335984"].rewatchQueued, true);
+  await navigate("folder/next-up");
+  click('[data-action="delete-folder"]');
+  click('[data-action="confirm-delete-folder"]');
+  await settle();
+  assert.equal(
+    state().folders.some((f) => f.id === "next-up"),
+    false,
+  );
+  click('#toast [data-action="undo"]');
+  assert.ok(state().folders.some((f) => f.id === "next-up"));
+  assert.ok(state().entries["tmdb:movie:335984"].folders.includes("next-up"));
+  await navigate("discover");
+  click('#main [data-action="favorite"][data-key="tmdb:movie:27205"]');
+  const external = { ...state(), goal: 99 };
+  window.localStorage.setItem(
+    "movie-world.library.v1",
+    JSON.stringify(external),
+  );
+  click('#toast [data-action="undo"]');
+  assert.equal(
+    state().goal,
+    99,
+    "Undo must never overwrite newer storage from another tab",
+  );
+  window.dispatchEvent(
+    new window.StorageEvent("storage", {
+      key: "movie-world.library.v1",
+      newValue: JSON.stringify(external),
+    }),
+  );
+  assert.ok(doc.querySelector('#sidebar [data-action="undo"]').disabled);
 });
