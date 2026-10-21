@@ -291,7 +291,8 @@ function readRoute() {
   $("#global-search").value = "";
   page = 1;
   sort = isPersonal() ? "recent" : "popular";
-  libraryStatus = "all";
+  // The Watchlist opens on what you still plan to watch; other saved views list every status.
+  libraryStatus = route === "library" ? "queue" : "all";
   libraryKind = "all";
   discoveryFilters = emptyFilters();
   recommendationOffset = 0;
@@ -629,7 +630,7 @@ function renderMain() {
           )
           .join(
             "",
-          )}</select><label class="sr-only" for="status-filter">Watch status</label><select id="status-filter"><option value="all">All statuses</option>${STATUSES.map((s) => `<option value="${s}" ${libraryStatus === s ? "selected" : ""}>${statusLabels[s]}</option>`).join("")}</select></div>`
+          )}</select><label class="sr-only" for="status-filter">Watch status</label><select id="status-filter">${route === "library" ? `<option value="queue" ${libraryStatus === "queue" ? "selected" : ""}>Want to watch &amp; watching</option>` : ""}<option value="all" ${libraryStatus === "all" ? "selected" : ""}>All statuses</option>${STATUSES.map((s) => `<option value="${s}" ${libraryStatus === s ? "selected" : ""}>${statusLabels[s]}</option>`).join("")}</select></div>`
       : route === "upcoming"
         ? `<nav class="type-tabs segmented" aria-label="Content type">${[
             ["movie", "Movies"],

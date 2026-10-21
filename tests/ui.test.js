@@ -182,6 +182,12 @@ test("app interactions: filters, rating, watched, collections, hide-watched, sug
   await navigate("collections");
   assert.equal(doc.querySelectorAll(".collection-tile").length, 3);
   await navigate("library");
+  const statusFilter = doc.querySelector("#status-filter");
+  assert.equal(statusFilter.value, "queue", "the Watchlist opens on want-to-watch and watching");
+  assert.equal(cards(), 0, "a completed title is not in the default view");
+  statusFilter.value = "all";
+  statusFilter.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await settle();
   click('[data-action="toggle-selection"]');
   const check = doc.querySelector("[data-selection]");
   check.checked = true;

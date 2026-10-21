@@ -347,7 +347,8 @@ export function filterEntries(
       (view !== "rewatch" || e.rewatchQueued) &&
       (!folder || e.folders.includes(folder)) &&
       (kind === "all" || e.title.kind === kind) &&
-      (status === "all" || e.status === status) &&
+      (status === "all" ||
+        (status === "queue" ? e.status === "planned" || e.status === "watching" : e.status === status)) &&
       `${e.title.title} ${e.notes} ${(e.tags || []).join(" ")} ${e.title.genres.join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase()),

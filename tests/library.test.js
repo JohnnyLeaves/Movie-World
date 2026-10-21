@@ -130,3 +130,13 @@ test("followed upcoming titles, episode records and keywords survive a backup an
   const { interested, ...old } = JSON.parse(JSON.stringify(lib));
   assert.deepEqual(parseLibrary(JSON.stringify(old)).interested, {});
 });
+
+test("the queue status filter keeps only want-to-watch and watching titles", () => {
+  let lib = emptyLibrary();
+  ["planned", "watching", "completed", "dropped"].forEach((status, i) => (lib = saveTitle(lib, demoTitles[i], { status })));
+  assert.deepEqual(
+    filterEntries(lib, { status: "queue" }).map((e) => e.status).sort(),
+    ["planned", "watching"],
+  );
+  assert.equal(filterEntries(lib, { status: "all" }).length, 4);
+});
