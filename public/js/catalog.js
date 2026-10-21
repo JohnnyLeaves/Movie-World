@@ -1,5 +1,5 @@
 import { demoTitles } from "./demo.js";
-import { matchesFilters } from "../public/js/catalog-filters.js";
+import { matchesFilters } from "./catalog-filters.js";
 
 const genres = {
   28: "Action",
@@ -336,6 +336,13 @@ export function createCatalog({
             : null,
           startAfter: after,
           startBefore: before,
+          sort: query
+            ? ["SEARCH_MATCH"]
+            : sort === "rating"
+              ? ["SCORE_DESC"]
+              : sort === "newest"
+                ? [airing === "upcoming" ? "START_DATE" : "START_DATE_DESC"]
+                : ["POPULARITY_DESC"],
         },
       );
       if (!data.Page) throw new ApiError("Missing anime results.");

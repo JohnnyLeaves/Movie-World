@@ -69,6 +69,8 @@ The app expects a TMDB **Bearer read token**, not the shorter v3 API key and not
 
 **Anime works without a key:** select Live in Settings, then browse the Anime tab. When no TMDB token is configured, switching to live automatically selects Anime. The combined All worlds live feed requires a TMDB token and searches TMDB and the anime provider. The movie/TV and anime catalogues may list the same anime separately; provider identities remain separate to prevent incorrect merges. Combined pages follow each provider’s own pagination and ranking. Sorting is available in individual browse tabs; search uses provider relevance.
 
+**No server (phone app):** when the page is opened without the Node server (for example from a static host or a packaged app), it calls TMDB, AniList and Jikan directly. Paste the token in **Settings → TMDB**, press Test, then Save. The token is stored only on that device and is not part of library backups.
+
 ## Data and privacy
 
 The personal library is stored under `movie-world.library.v1` in **this browser’s localStorage**. It is not sent to TMDB or Jikan. There is no cloud sync, account backend or server-side user database in this MVP. A different browser, profile or origin (including changing ports) has a separate library. Export a JSON backup before clearing browser data or moving devices. Import replaces the current library after confirmation.
@@ -109,8 +111,11 @@ public/js/insights.js  Taste profiles, ranking, tonight pick, stats
 public/js/select-menu.js  Animated dropdown lists
 public/theme.css   Colour theme, motion and the newer components
 server/index.js    HTTP server, static assets, API routes and security headers
-server/catalog.js  TMDB / AniList / Jikan adapters, cache and request scheduling
-server/demo.js     Editorial preview catalogue
+public/js/catalog.js  TMDB / AniList / Jikan adapters, cache and request scheduling (runs in the server and in the app)
+public/js/demo.js  Editorial preview catalogue
+public/js/api-core.js  The /api/* routes and validation, shared by the server and the app
+public/js/local-api.js  In-app API for the no-server mode, with the pasted TMDB token
+public/mobile.css  Phone layout, touch sizes and safe areas
 tests/             Node test runner tests
 ```
 

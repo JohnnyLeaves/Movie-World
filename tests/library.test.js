@@ -12,7 +12,7 @@ import {
   toggleInterested,
   validateTitle,
 } from "../public/js/library.js";
-import { demoTitles } from "../server/demo.js";
+import { demoTitles } from "../public/js/demo.js";
 
 test("favourites, rating, notes, status and progress survive a backup round trip", () => {
   let lib = saveTitle(emptyLibrary(), demoTitles[0], {

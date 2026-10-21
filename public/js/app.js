@@ -249,7 +249,12 @@ function renderStats() {
   el.dataset.sig = statsHtml;
   el.innerHTML = statsHtml;
 }
+// With no Node server (the phone app) the same /api/... calls are answered by the in-app adapter instead.
+let localApi = null,
+  backendReady = Promise.resolve();
 async function api(path, signal) {
+  await backendReady;
+  if (localApi) return localApi.request(path);
   const response = await fetch(path, { signal });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Something went wrong.");
@@ -1275,7 +1280,7 @@ function folderDialog(rename = false) {
 }
 function settings() {
   utility(
-    `<div class="eyebrow">MISSION CONTROL</div><h2>Your universe. Your rules.</h2><p>Connect your catalogue and take care of your library.</p><section class="settings-section"><h3>Catalogue connection</h3><div class="connection-row"><span>${icon("globe")} TMDB <small>Movies & TV series</small></span><span class="connection-pill ${config.tmdbConfigured ? "connected" : ""}">${config.tmdbConfigured ? "Connected" : "Key needed"}</span></div><p>Add your <strong>TMDB API Read Access Token</strong> to <code>TMDB_READ_TOKEN</code> in the project’s <code>.env</code> file, then restart the server. The token stays on the server.</p><a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer" class="text-link">Get a TMDB token ${icon("arrow")}</a><div class="connection-row"><span>${icon("anime")} AniList + Jikan <small>Anime</small></span><span class="connection-pill connected">No key needed</span></div><label class="mode-choice">Catalogue mode<select id="mode-select"><option value="demo" ${mode === "demo" ? "selected" : ""}>Demo — curated preview</option><option value="live" ${mode === "live" ? "selected" : ""}>Live — connected providers</option></select></label><label class="mode-choice">Streaming region<select id="watch-region">${REGIONS.map(([v, l]) => `<option value="${v}" ${v === watchRegion ? "selected" : ""}>${l}</option>`).join("")}</select></label><p class="small-print">Without a TMDB token, choose Anime in live mode. Live search uses provider relevance; combined pages may include the same anime from two sources.</p></section><section class="settings-section"><h3>Your library, backed up</h3><p>Favourites, ratings, collections, watch progress and notes are stored in this browser. Export a backup to keep them safe or transfer them to another device.</p><div class="settings-actions"><button class="button secondary" data-action="export">${icon("download")} Export JSON</button><label class="button secondary import-button">${icon("upload")} Import backup<input type="file" id="import-file" accept=".json,application/json"/></label></div>${storageProblem ? `<div class="notice warning">${esc(storageProblem)}</div><button class="danger-text" data-action="recover-storage">Download unreadable data & start a new library</button>` : ""}</section><section class="settings-section credits-section"><h3>Catalogue credits</h3><a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer"><img class="tmdb-logo" src="/assets/tmdb.svg" alt="The Movie Database"/></a><p>This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability data is provided by <a href="https://www.justwatch.com" target="_blank" rel="noopener noreferrer">JustWatch</a>.</p><p>Anime metadata supplied by <a href="https://anilist.co" target="_blank" rel="noopener noreferrer">AniList</a> with <a href="https://jikan.moe" target="_blank" rel="noopener noreferrer">Jikan</a>, an unofficial MyAnimeList API, as a fallback. Demo scores and episode counts are preview snapshots. Movie World is a discovery and tracking app; it does not stream films or episodes.</p></section>`,
+    `<div class="eyebrow">MISSION CONTROL</div><h2>Your universe. Your rules.</h2><p>Connect your catalogue and take care of your library.</p><section class="settings-section"><h3>Catalogue connection</h3><div class="connection-row"><span>${icon("globe")} TMDB <small>Movies & TV series</small></span><span class="connection-pill ${config.tmdbConfigured ? "connected" : ""}">${config.tmdbConfigured ? "Connected" : "Key needed"}</span></div>${localApi ? `<p>Paste your <strong>TMDB API Read Access Token</strong>. It is stored only on this device and is never included in backups.</p><div class="token-row"><input id="tmdb-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="eyJhbGciOi…" value="${esc(localApi.getToken())}" aria-label="TMDB API Read Access Token"/><button class="button secondary" data-action="test-token">Test</button><button class="button primary" data-action="save-token">Save</button></div><p class="token-status" id="token-status" role="status"></p>` : "<p>Add your <strong>TMDB API Read Access Token</strong> to <code>TMDB_READ_TOKEN</code> in the project’s <code>.env</code> file, then restart the server. The token stays on the server.</p>"}<a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer" class="text-link">Get a TMDB token ${icon("arrow")}</a><div class="connection-row"><span>${icon("anime")} AniList + Jikan <small>Anime</small></span><span class="connection-pill connected">No key needed</span></div><label class="mode-choice">Catalogue mode<select id="mode-select"><option value="demo" ${mode === "demo" ? "selected" : ""}>Demo — curated preview</option><option value="live" ${mode === "live" ? "selected" : ""}>Live — connected providers</option></select></label><label class="mode-choice">Streaming region<select id="watch-region">${REGIONS.map(([v, l]) => `<option value="${v}" ${v === watchRegion ? "selected" : ""}>${l}</option>`).join("")}</select></label><p class="small-print">Without a TMDB token, choose Anime in live mode. Live search uses provider relevance; combined pages may include the same anime from two sources.</p></section><section class="settings-section"><h3>Your library, backed up</h3><p>Favourites, ratings, collections, watch progress and notes are stored in this browser. Export a backup to keep them safe or transfer them to another device.</p><div class="settings-actions"><button class="button secondary" data-action="export">${icon("download")} Export JSON</button><label class="button secondary import-button">${icon("upload")} Import backup<input type="file" id="import-file" accept=".json,application/json"/></label></div>${storageProblem ? `<div class="notice warning">${esc(storageProblem)}</div><button class="danger-text" data-action="recover-storage">Download unreadable data & start a new library</button>` : ""}</section><section class="settings-section credits-section"><h3>Catalogue credits</h3><a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer"><img class="tmdb-logo" src="/assets/tmdb.svg" alt="The Movie Database"/></a><p>This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability data is provided by <a href="https://www.justwatch.com" target="_blank" rel="noopener noreferrer">JustWatch</a>.</p><p>Anime metadata supplied by <a href="https://anilist.co" target="_blank" rel="noopener noreferrer">AniList</a> with <a href="https://jikan.moe" target="_blank" rel="noopener noreferrer">Jikan</a>, an unofficial MyAnimeList API, as a fallback. Demo scores and episode counts are preview snapshots. Movie World is a discovery and tracking app; it does not stream films or episodes.</p></section>`,
     "Settings and catalogue credits",
   );
 }
@@ -1613,6 +1618,34 @@ document.addEventListener("click", async (event) => {
   if (action === "rate") {
     const v = Number(button.dataset.value);
     return entryUpdate({ rating: v === (library.entries[selected?.key]?.rating || 0) ? 0 : v });
+  }
+  if (action === "test-token" || action === "save-token") {
+    const field = $("#tmdb-token"),
+      status = $("#token-status");
+    if (!localApi || !field) return;
+    const value = field.value.trim();
+    if (action === "test-token") {
+      status.textContent = "Checking with TMDB…";
+      const result = await localApi.testToken(value);
+      status.textContent = result.message;
+      status.dataset.ok = String(result.ok);
+      return;
+    }
+    try {
+      localApi.setToken(value);
+    } catch (e) {
+      return void ((status.textContent = e.message), (status.dataset.ok = "false"));
+    }
+    config = { ...config, tmdbConfigured: Boolean(value) };
+    status.textContent = value ? "Saved. Movies and series are now available in Live mode." : "Token removed.";
+    status.dataset.ok = "true";
+    forYouRaw = null;
+    weekData = null;
+    $("#utility-dialog").querySelector(".connection-pill")?.classList.toggle("connected", Boolean(value));
+    const pill = $("#utility-dialog").querySelector(".connection-pill");
+    if (pill) pill.textContent = value ? "Connected" : "Key needed";
+    if (mode === "live") load();
+    return;
   }
   if (action === "rate-skip") return closeRatePop();
   if (action === "rate-card") {
@@ -2007,8 +2040,19 @@ window.addEventListener("storage", (event) => {
     toast("A library update from another tab could not be loaded.");
   }
 });
+// Work out how the app gets its data: a Node server if one answers, otherwise the in-app adapter.
+async function detectBackend() {
+  try {
+    const response = await fetch("/api/config"),
+      data = await response.json();
+    if (response.ok && typeof data.tmdbConfigured === "boolean" && !data.offline) return data;
+  } catch {}
+  const { createLocalApi } = await import("./local-api.js");
+  localApi = createLocalApi(localStorage);
+  return localApi.request("/api/config");
+}
 // Pages that need to know whether TMDB is connected wait on this before fetching.
-const configReady = api("/api/config")
+const configReady = (backendReady = detectBackend())
   .then((data) => {
     config = data;
   })

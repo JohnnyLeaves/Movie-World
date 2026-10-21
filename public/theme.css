@@ -1937,3 +1937,42 @@ select[aria-expanded="true"] {
 .hide-watched input:checked ~ span {
   color: var(--text);
 }
+
+/* Standalone mode: paste, test and save the TMDB token. */
+.token-row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+.token-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  background: #0d0709;
+  border: 1px solid #2a1419;
+  border-radius: 8px;
+}
+.token-status {
+  min-height: 18px;
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.token-status[data-ok="true"] {
+  color: var(--gold);
+}
+.token-status[data-ok="false"] {
+  color: #ff8fa3;
+}
+@media (max-width: 620px) {
+  .token-row {
+    flex-wrap: wrap;
+  }
+  .token-row input {
+    flex-basis: 100%;
+  }
+  .token-row .button {
+    flex: 1;
+  }
+}

@@ -5,7 +5,7 @@ import {
   normalizeTmdb,
   normalizeJikan,
   normalizeAnilist,
-} from "../server/catalog.js";
+} from "../public/js/catalog.js";
 
 test("demo search covers movie, TV and anime without making network calls", async () => {
   const cat = createCatalog({

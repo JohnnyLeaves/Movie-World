@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { Window } from "happy-dom";
-import { createCatalog } from "../server/catalog.js";
+import { createCatalog } from "../public/js/catalog.js";
 import { setTimeout as delay } from "node:timers/promises";
 
 test("app interactions: filters, rating, watched, collections, hide-watched, suggestions and the tonight game", async (t) => {

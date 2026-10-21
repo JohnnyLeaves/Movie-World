@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createCatalog, normalizeTmdb } from "../server/catalog.js";
+import { createCatalog, normalizeTmdb } from "../public/js/catalog.js";
 import { createApp } from "../server/index.js";
 
 test("demo genre, release year and score filters work together before pagination", async () => {
@@ -167,4 +167,17 @@ test("matchesFilters needs every genre and honours the year range", async () => 
   assert.ok(!matchesFilters(t, { yearFrom: 2016 }));
   assert.ok(!matchesFilters(t, { yearTo: 2014 }));
   assert.ok(matchesFilters(t, { genre: "Drama,Crime", year: 2015 }));
+});
+
+test("AniList is always asked for an explicit sort order", async () => {
+  const sent = [];
+  const cat = createCatalog({
+    fetcher: async (url, init) => {
+      sent.push(JSON.parse(init.body).variables.sort);
+      return Response.json({ data: { Page: { pageInfo: {}, media: [] } } });
+    },
+  });
+  for (const args of [{}, { sort: "rating" }, { sort: "newest" }, { sort: "newest", airing: "upcoming" }, { query: "naruto" }])
+    await cat.catalog({ kind: "anime", mode: "live", page: 1 + sent.length, ...args });
+  assert.deepEqual(sent, [["POPULARITY_DESC"], ["SCORE_DESC"], ["START_DATE_DESC"], ["START_DATE"], ["SEARCH_MATCH"]]);
 });

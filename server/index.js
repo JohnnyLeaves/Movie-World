@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCatalog, ApiError } from "./catalog.js";
-import { GENRES } from "../public/js/catalog-filters.js";
+import { createCatalog } from "../public/js/catalog.js";
+import { handleApi } from "../public/js/api-core.js";
 
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 const mime = {
@@ -39,129 +39,8 @@ export function createApp({
         return json(405, { error: "Method not allowed." });
       }
       const url = new URL(req.url, "http://localhost");
-      if (url.pathname === "/api/config")
-        return json(200, {
-          tmdbConfigured: catalog.configured,
-          animeAvailable: true,
-        });
-      if (url.pathname === "/api/catalog") {
-        const kind = url.searchParams.get("kind") || "all",
-          mode = url.searchParams.get("mode") || "demo",
-          query = (url.searchParams.get("query") || "").trim(),
-          page = Number(url.searchParams.get("page") || 1),
-          sort = url.searchParams.get("sort") || "popular",
-          genre = url.searchParams.get("genre") || "",
-          yearFrom = url.searchParams.get("yearFrom") || "",
-          yearTo = url.searchParams.get("yearTo") || "",
-          airing = url.searchParams.get("airing") || "",
-          year = url.searchParams.get("year") || "",
-          minScore = Number(url.searchParams.get("minScore") || 0);
-        if (
-          !["all", "movie", "tv", "anime"].includes(kind) ||
-          !["live", "demo"].includes(mode) ||
-          !["popular", "rating", "newest"].includes(sort) ||
-          !["", "new", "airing", "ended", "upcoming", "week"].includes(airing) ||
-          !Number.isInteger(page) ||
-          page < 1 ||
-          page > 500 ||
-          query.length > 150 ||
-          (genre &&
-            (genre.split(",").length > 5 ||
-              !genre.split(",").every((g) => GENRES.includes(g)))) ||
-          [year, yearFrom, yearTo].some(
-            (y) =>
-              y &&
-              (!/^\d{4}$/.test(y) ||
-                Number(y) < 1900 ||
-                Number(y) > new Date().getFullYear() + 5),
-          ) ||
-          (yearFrom && yearTo && Number(yearFrom) > Number(yearTo)) ||
-          !Number.isFinite(minScore) ||
-          minScore < 0 ||
-          minScore > 10
-        )
-          throw new ApiError("Invalid search parameters.", 400);
-        return json(
-          200,
-          await catalog.catalog({
-            kind,
-            mode,
-            query,
-            page,
-            sort,
-            genre,
-            year,
-            yearFrom,
-            yearTo,
-            minScore,
-            airing,
-          }),
-        );
-      }
-      if (url.pathname.startsWith("/api/title/")) {
-        const match = url.pathname.match(
-          /^\/api\/title\/(tmdb|jikan)\/(movie|tv|anime)\/(\d+)$/,
-        );
-        if (!match) throw new ApiError("Invalid title.", 400);
-        const mode = url.searchParams.get("mode") || "live";
-        if (!["live", "demo"].includes(mode))
-          throw new ApiError("Invalid mode.", 400);
-        return json(
-          200,
-          await catalog.detail(match[1], match[2], Number(match[3]), mode),
-        );
-      }
-      if (url.pathname.startsWith("/api/availability/")) {
-        const match = url.pathname.match(
-            /^\/api\/availability\/(movie|tv)\/(\d+)$/,
-          ),
-          region = url.searchParams.get("region") || "PT";
-        if (
-          !match ||
-          !["PT", "US", "GB", "ES", "FR", "DE", "JP", "BR"].includes(region)
-        )
-          throw new ApiError("Invalid availability request.", 400);
-        return json(
-          200,
-          await catalog.availability(match[1], Number(match[2]), region),
-        );
-      }
-      if (url.pathname === "/api/foryou") {
-        const kind = url.searchParams.get("kind");
-        let profile;
-        try {
-          profile = JSON.parse(url.searchParams.get("profile") || "{}");
-        } catch {
-          throw new ApiError("Invalid profile.", 400);
-        }
-        const clean = {
-          keywords: (Array.isArray(profile.keywords) ? profile.keywords : [])
-            .slice(0, 8)
-            .filter((k) => k && typeof k.name === "string" && k.name.length <= 60)
-            .map((k) => ({ id: Number.isInteger(k.id) ? k.id : undefined, name: k.name })),
-          seeds: (Array.isArray(profile.seeds) ? profile.seeds : [])
-            .slice(0, 6)
-            .filter((x) => x && Number.isInteger(x.id) && typeof x.title === "string")
-            .map((x) => ({ id: x.id, title: x.title.slice(0, 120) })),
-        };
-        return json(200, await catalog.foryou(kind, clean));
-      }
-      if (url.pathname.startsWith("/api/person/")) {
-        const match = url.pathname.match(/^\/api\/person\/(\d+)$/);
-        if (!match) throw new ApiError("Invalid person.", 400);
-        return json(200, await catalog.person(Number(match[1])));
-      }
-      if (url.pathname.startsWith("/api/season/")) {
-        const match = url.pathname.match(/^\/api\/season\/(\d+)\/(\d+)$/);
-        if (!match || Number(match[2]) > 200)
-          throw new ApiError("Invalid season.", 400);
-        return json(
-          200,
-          await catalog.season(Number(match[1]), Number(match[2])),
-        );
-      }
       if (url.pathname.startsWith("/api/"))
-        return json(404, { error: "Endpoint not found." });
+        return json(200, await handleApi(url, catalog));
       const decoded = decodeURIComponent(url.pathname);
       const file = resolve(
         publicDir,

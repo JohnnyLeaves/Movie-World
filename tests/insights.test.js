@@ -15,7 +15,7 @@ import {
   validDate,
   hasWatched,
 } from "../public/js/insights.js";
-import { demoTitles } from "../server/demo.js";
+import { demoTitles } from "../public/js/demo.js";
 
 test("watched status and a rewatch queue survive backup and future status changes", () => {
   const title = demoTitles[0];

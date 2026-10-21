@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { demoTitles } from "../server/demo.js";
+import { demoTitles } from "../public/js/demo.js";
 
 test("offline worker serves filtered demo data and never caches live API responses", async (t) => {
   const original = {
