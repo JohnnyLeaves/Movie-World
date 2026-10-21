@@ -1,5 +1,5 @@
 import { matchesFilters } from "./js/catalog-filters.js";
-const CACHE = "movie-world-v6";
+const CACHE = "movie-world-v7";
 const SHELL = [
   "/",
   "/index.html",
@@ -7,6 +7,7 @@ const SHELL = [
   "/experience.css",
   "/watch.css",
   "/theme.css",
+  "/mobile.css",
   "/manifest.webmanifest",
   "/assets/icon.svg",
   "/assets/tmdb.svg",

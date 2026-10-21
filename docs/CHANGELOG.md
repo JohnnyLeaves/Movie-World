@@ -10,6 +10,12 @@
 - Removed: Undo, the Watch diary menu entry, the per-title notes/tags/priority panel and the "Log a watch" dialog.
 - Hardened image URL validation, malformed-URL handling, and refreshed the offline cache.
 
+# Phone pass
+
+- Finger-sized controls, whole-star rating taps on touch, a scrolling type selector, calendar events as posters, and no hover states that stick after a tap.
+- Title and person views are full-screen pages and Settings/Tonight are bottom sheets on phones; safe-area spacing for notches.
+- The Android back button (and a browser's) closes the top dialog before leaving the page.
+
 # Small library improvements
 
 - Added reversible Not interested filtering, a restore list and exclusion from taste signals and tonight picks.

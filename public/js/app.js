@@ -2018,6 +2018,43 @@ const configReady = api("/api/config")
     ),
   );
 initSelectMenus();
+// Android's back button (and a browser's) should close the top dialog before leaving the page: each open dialog
+// pushes one history entry, and closing it by any other route (X, Esc, backdrop) removes that entry again.
+if (typeof HTMLDialogElement !== "undefined" && typeof history !== "undefined") {
+  const openDialogs = [];
+  let skipPops = 0;
+  const nativeShow = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function () {
+    const wasOpen = this.open;
+    nativeShow.call(this);
+    if (!wasOpen) {
+      openDialogs.push(this);
+      history.pushState({ dialog: true }, "");
+    }
+  };
+  document.addEventListener(
+    "close",
+    (e) => {
+      const i = openDialogs.indexOf(e.target);
+      if (i < 0) return;
+      openDialogs.splice(i, 1);
+      skipPops++;
+      history.back();
+    },
+    true,
+  );
+  window.addEventListener("popstate", () => {
+    if (skipPops) return void skipPops--;
+    // Back pressed: close the newest dialog without also removing a history entry a second time.
+    const top = openDialogs.pop();
+    if (top) top.close();
+  });
+}
+// Escape and the back button close the title view without going through its X button.
+$("#detail-dialog")?.addEventListener("close", () => {
+  detailController?.abort();
+  selected = null;
+});
 $("#trailer-dialog")?.addEventListener("close", (e) => (e.target.innerHTML = ""));
 $("#person-dialog")?.addEventListener("click", (e) => e.target === e.currentTarget && e.currentTarget.close());
 // Click on the backdrop closes the trailer; so does the video ending.
