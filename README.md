@@ -81,7 +81,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 npm run apk
 ```
 
-The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`; copy it to the phone and install it (allow installs from your file manager). Re-run `npm run apk` after any change in `public/`. `npm run icons` regenerates the launcher icon and splash screen from `public/assets/icon.svg`'s drawing in `scripts/make-icons.mjs`. Library backups are exported through the Android share sheet.
+Back closes a dialog, then steps back through pages, then leaves the app. The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`; copy it to the phone and install it (allow installs from your file manager). Re-run `npm run apk` after any change in `public/`. `npm run icons` regenerates the launcher icon and splash screen from `public/assets/icon.svg`'s drawing in `scripts/make-icons.mjs`. Library backups are exported through the Android share sheet.
 
 ## Data and privacy
 
