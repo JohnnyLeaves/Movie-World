@@ -439,8 +439,51 @@ function applyFilters(next) {
   page = 1;
   load();
 }
+const catalogUrl = (p) =>
+  `/api/catalog?${new URLSearchParams({ kind: route === "recommendations" && mode === "live" && !config.tmdbConfigured ? "anime" : kind(), query: route === "recommendations" ? "" : query, sort, page: String(p), mode, genre: discoveryFilters.genres.join(","), yearFrom: discoveryFilters.yearFrom, yearTo: discoveryFilters.yearTo, minScore: String(discoveryFilters.minScore), airing: discoveryFilters.airing, ...(route === "upcoming" ? { airing: "upcoming" } : {}) })}`;
+// Infinite scroll: a sentinel under the grid asks for the next page when it nears the screen, and the new cards
+// are appended in place so the ones already shown never re-render.
+let moreObserver = null,
+  loadingMore = false;
+const listed = (t) => !library.dismissed?.[t.key] && !(hideWatched && EXPLORE.includes(route) && hasWatched(library, t.key));
+function watchSentinel() {
+  moreObserver?.disconnect();
+  const sentinel = $(".load-sentinel");
+  if (!sentinel || typeof IntersectionObserver === "undefined") return;
+  moreObserver = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && loadMore(), { rootMargin: "800px 0px" });
+  moreObserver.observe(sentinel);
+}
+async function loadMore() {
+  const sentinel = $(".load-sentinel");
+  if (loadingMore || !catalogData || !sentinel) return;
+  loadingMore = true;
+  const own = controller,
+    next = page + 1;
+  sentinel.classList.remove("failed");
+  sentinel.textContent = "Loading more…";
+  try {
+    const data = await api(catalogUrl(next), own.signal);
+    if (own !== controller) return;
+    page = next;
+    const seen = new Set(catalogData.results.map((t) => t.key)),
+      fresh = data.results.filter((t) => !seen.has(t.key));
+    catalogData = { ...catalogData, results: [...catalogData.results, ...fresh], totalPages: data.totalPages };
+    fresh.forEach((t) => titleCache.set(t.key, t));
+    $(".title-grid:not(.skeleton-grid)")?.insertAdjacentHTML("beforeend", fresh.filter(listed).map(card).join(""));
+    bindImages();
+    if (page >= Math.min(data.totalPages, 500)) sentinel.replaceWith(Object.assign(document.createElement("p"), { className: "end-note", textContent: "You have reached the end." }));
+  } catch (e) {
+    if (e.name === "AbortError" || own !== controller) return;
+    sentinel.classList.add("failed");
+    sentinel.textContent = "Could not load more. Tap to try again.";
+  } finally {
+    loadingMore = false;
+    if (own === controller) watchSentinel();
+  }
+}
 async function load() {
   controller?.abort();
+  loadingMore = false;
   if (route === "recommendations" && mode === "live") return loadForYou();
   if (route === "discover" && !query) loadWeek();
   if (isPersonal() || (isExperience() && route !== "recommendations")) {
@@ -454,12 +497,11 @@ async function load() {
   loading = true;
   error = "";
   catalogData = null;
+  // A fresh list starts at the top; otherwise the old scroll position would trigger the next page at once.
+  window.scrollTo?.({ top: 0, behavior: "instant" });
   renderMain();
   try {
-    const data = await api(
-      `/api/catalog?${new URLSearchParams({ kind: route === "recommendations" && mode === "live" && !config.tmdbConfigured ? "anime" : kind(), query: route === "recommendations" ? "" : query, sort, page: String(page), mode, genre: discoveryFilters.genres.join(","), yearFrom: discoveryFilters.yearFrom, yearTo: discoveryFilters.yearTo, minScore: String(discoveryFilters.minScore), airing: discoveryFilters.airing, ...(route === "upcoming" ? { airing: "upcoming" } : {}) })}`,
-      own.signal,
-    );
+    const data = await api(catalogUrl(page), own.signal);
     if (own !== controller) return;
     catalogData = data;
     data.results.forEach((t) => titleCache.set(t.key, t));
@@ -633,7 +675,7 @@ function renderMain() {
   ${selectionMode ? `<div class="bulk-toolbar"><span>${selection.size} selected</span><button data-action="select-visible">Select visible</button><button class="button primary" data-action="bulk-edit" ${selection.size ? "" : "disabled"}>Organise selected ${icon("folder")}</button></div>` : ""}
   ${catalogData?.warning ? `<div class="notice warning">${esc(catalogData.warning)}</div>` : ""}
   ${error ? `<div class="empty-state error-state">${icon("globe")}<h3>Connection interrupted</h3><p>${esc(error)}</p><div><button class="button primary" data-action="retry">Try again</button><button class="button secondary" data-action="toggle-mode">${mode === "live" ? "Explore demo" : "Use live catalogue"}</button></div></div>` : loading ? `<div class="title-grid skeleton-grid" aria-label="Loading titles" aria-busy="true">${Array.from({ length: 6 }, () => '<div class="skeleton-card"><div></div><span></span><small></small></div>').join("")}</div>` : titles.length ? `<div class="title-grid">${titles.map(card).join("")}</div>` : `<div class="empty-state">${icon(personal ? "library" : "search")}<span class="eyebrow">THE NEXT CHAPTER IS YOURS</span><h3>${personal ? "Make this space your own." : "No titles found."}</h3><p>${personal ? (query || libraryStatus !== "all" || libraryKind !== "all" ? "Try changing your filters or search." : "Save a title, tap a heart, or add something to a collection. Your story starts with a discovery.") : "Try a different title or switch content type."}</p><a href="#discover" class="button primary">Explore titles ${icon("arrow")}</a></div>`}
-  ${!personal && catalogData && catalogData.totalPages > 1 ? `<div class="pagination"><button class="button secondary" data-action="previous" ${page === 1 ? "disabled" : ""}>Previous</button><span>Page ${page} of ${catalogData.totalPages}${route === "discover" && mode === "live" ? " · Combined provider pages" : ""}</span><button class="button secondary" data-action="next" ${page >= catalogData.totalPages ? "disabled" : ""}>Next page ${icon("arrow")}</button></div>` : ""}
+  ${!personal && catalogData && !loading && !error && catalogData.results.length ? (page < Math.min(catalogData.totalPages, 500) ? '<div class="load-sentinel" data-action="retry-more" role="status">Loading more…</div>' : catalogData.totalPages > 1 ? '<p class="end-note">You have reached the end.</p>' : "") : ""}
   <div class="library-stats" id="library-stats"></div></section>`;
   renderStats();
   if (viewMode === "list")
@@ -641,6 +683,7 @@ function renderMain() {
       .querySelector(".title-grid:not(.skeleton-grid)")
       ?.classList.add("list-view");
   bindImages();
+  watchSentinel();
 }
 function bindImages() {
   decorateCards();
@@ -1790,17 +1833,7 @@ document.addEventListener("click", async (event) => {
     return;
   }
   if (action === "retry") return load();
-  if (action === "next") {
-    page++;
-    load();
-    $("#main").scrollIntoView({ behavior: "smooth" });
-    return;
-  }
-  if (action === "previous") {
-    page = Math.max(1, page - 1);
-    load();
-    return;
-  }
+  if (action === "retry-more") return loadMore();
   if (action === "menu") {
     $("#sidebar").classList.toggle("open");
     syncNavigation();

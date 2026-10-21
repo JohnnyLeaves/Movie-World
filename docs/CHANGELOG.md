@@ -16,6 +16,10 @@
 - Title and person views are full-screen pages and Settings/Tonight are bottom sheets on phones; safe-area spacing for notches.
 - The Android back button (and a browser's) closes the top dialog before leaving the page.
 
+# Infinite scroll
+
+- Movies, series, anime and Upcoming load the next page as you near the bottom, instead of Previous/Next buttons. Cards are appended in place; changing a filter or sort starts again from the top.
+
 # Android app
 
 - Capacitor wrapper (`android/`) around `public/`; builds a debug APK. Icons and splash are generated from the logo.

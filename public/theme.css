@@ -1976,3 +1976,37 @@ select[aria-expanded="true"] {
     flex: 1;
   }
 }
+
+/* Infinite scroll: loader and end note under the grid. */
+.load-sentinel,
+.end-note {
+  margin: 34px 0 10px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.load-sentinel::before {
+  content: "";
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 0 auto 12px;
+  border: 2px solid #3a1a21;
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+.load-sentinel.failed {
+  cursor: pointer;
+  color: #ff8fa3;
+}
+.load-sentinel.failed::before {
+  display: none;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
