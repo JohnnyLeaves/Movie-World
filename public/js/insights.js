@@ -219,23 +219,152 @@ export function recommendTitles(library, candidates, limit = 12) {
     .sort((a, b) => b.affinity - a.affinity)
     .slice(0, limit);
 }
-export function pickTonight(
+// --- "For you": taste profile and ranking -------------------------------------------
+// TMDB (movies + series) and AniList (anime) are separate models: their keyword/tag vocabularies differ,
+// so a profile is built per provider and never merged.
+const META_KEYWORD = /stinger|^based on|sequel|remake|woman director|independent film|^anime$|^live action$/i;
+const norm = (v) => String(v || "").trim().toLowerCase();
+
+// How much one library entry says about taste. Negative means "steer away from this".
+export function entryWeight(library, entry) {
+  const key = entry.title.key,
+    watched = hasWatched(library, key),
+    r = Number(entry.rating) || 0;
+  let w = 0;
+  if (r > 0 && r < 5) w = -(5 - r) * 0.6; // disliked
+  else if (r >= 5 && r < 7.5) w = 0.4 + (r - 5) * 0.32; // a 5 counts a little
+  else if (r >= 7.5) w = 1.2 + (r - 7.5) * 0.6; // 7.5 counts more, 10 the most
+  else if (watched) w = 0.4; // watched, never rated
+  else if (entry.status === "watching" && (entry.progress || 0) >= 3) w = 0.3;
+  if (entry.favorite) w += 3.5; // favourites count on their own, whatever the rating
+  if (entry.rewatchQueued) w += 1.5;
+  const finishes = (library.diary || []).filter(
+    (l) => l.key === key && (l.type === "finish" || l.completed),
+  ).length;
+  if (r >= 5 || entry.favorite) w += Math.min(2, Math.max(0, finishes - 1));
+  if (entry.status === "dropped") w -= 1.5;
+  return w;
+}
+
+// Per-provider genre and keyword weights, plus the liked titles worth asking TMDB for similar ones.
+export function tasteProfiles(library) {
+  const blank = () => ({ keywords: new Map(), genres: new Map(), seeds: [] });
+  const profiles = { tmdb: blank(), anime: blank() };
+  for (const entry of Object.values(library.entries || {})) {
+    if (library.dismissed?.[entry.title.key]) continue;
+    const w = entryWeight(library, entry);
+    if (!w) continue;
+    const t = entry.title,
+      p = t.source === "jikan" ? profiles.anime : profiles.tmdb,
+      names = (t.keywords || []).filter((k) => !META_KEYWORD.test(k.name)),
+      per = w / Math.sqrt(Math.max(3, names.length));
+    for (const k of names) {
+      const id = norm(k.name),
+        cur = p.keywords.get(id) || { w: 0, name: k.name, id: k.id };
+      cur.w += per;
+      p.keywords.set(id, cur);
+    }
+    for (const g of t.genres || []) p.genres.set(g, (p.genres.get(g) || 0) + w / 3);
+    if (w >= 1.2 && t.source === "tmdb")
+      p.seeds.push({ kind: t.kind, id: t.id, title: t.title, w });
+  }
+  for (const p of Object.values(profiles)) p.seeds.sort((a, b) => b.w - a.w);
+  return profiles;
+}
+
+// Strongest positive keywords/tags first; used for both discovery queries and the taste chips.
+export function topKeywords(profile, limit = 6) {
+  return [...profile.keywords.values()]
+    .filter((k) => k.w > 0)
+    .sort((a, b) => b.w - a.w)
+    .slice(0, limit);
+}
+
+// Scores candidates against one provider's profile and returns the best, with a reason each.
+export function rankForYou(profile, candidates, library, limit = 24) {
+  const seedWeight = new Map(profile.seeds.map((s) => [s.title, s.w]));
+  const scored = candidates
+    .filter(
+      (t) =>
+        !library.dismissed?.[t.key] &&
+        !library.entries?.[t.key] &&
+        !library.interested?.[t.key] &&
+        !hasWatched(library, t.key),
+    )
+    .map((t) => {
+      const names = new Set(
+        [...(t.keywords || []).map((k) => k.name), ...(t.matched || [])]
+          .filter((n) => !META_KEYWORD.test(n))
+          .map(norm),
+      );
+      const hits = [...names]
+        .map((n) => [profile.keywords.get(n), n])
+        .filter(([k]) => k && k.w !== 0)
+        .map(([k]) => k)
+        .sort((a, b) => b.w - a.w);
+      const keywordScore = hits.reduce((n, k) => n + k.w, 0),
+        genreScore = (t.genres || []).reduce((n, g) => n + (profile.genres.get(g) || 0) * 0.35, 0),
+        quality = Math.max(-0.5, Math.min(1, ((t.score || 0) - 6) / 3)),
+        seedScore = t.seed ? 1.2 + Math.min(2, (seedWeight.get(t.seed) || 0) / 3) : 0;
+      const positive = hits.filter((k) => k.w > 0).slice(0, 2);
+      return {
+        title: t,
+        total: keywordScore + genreScore + quality + seedScore,
+        lead: positive.map((k) => norm(k.name)),
+        reason: t.seed
+          ? `Because you liked ${t.seed}`
+          : positive.length
+            ? `Matches your taste for ${positive.map((k) => k.name).join(" and ")}`
+            : "A well-rated pick to start your profile",
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+  // Variety: each pick makes later picks sharing its lead keywords slightly less attractive.
+  const used = new Map(),
+    out = [];
+  while (scored.length && out.length < limit) {
+    let best = 0,
+      bestScore = -Infinity;
+    scored.forEach((c, i) => {
+      const adj = c.total - 0.45 * c.lead.reduce((n, k) => n + (used.get(k) || 0), 0);
+      if (adj > bestScore) ((bestScore = adj), (best = i));
+    });
+    const [pick] = scored.splice(best, 1);
+    pick.lead.forEach((k) => used.set(k, (used.get(k) || 0) + 1));
+    out.push(pick);
+  }
+  return out;
+}
+// "Tonight, decided": one title drawn from the watchlist AND the personalised suggestions.
+// Watchlist titles weigh more (high priority most); suggestions are weighted by their rank.
+export function tonightPick(
   library,
-  { kind = "all", genre = "", minutes = 0, random = Math.random } = {},
+  { kind = "all", genre = "", minutes = 0, suggestions = [], exclude = [], random = Math.random } = {},
 ) {
-  const choices = Object.values(library.entries).filter(
-    (e) =>
-      !library.dismissed?.[e.title.key] &&
-      ["planned", "on-hold"].includes(e.status) &&
-      (kind === "all" || e.title.kind === kind) &&
-      (!genre || e.title.genres.includes(genre)) &&
-      (!minutes || (e.title.runtime && e.title.runtime <= minutes)),
-  );
-  if (!choices.length) return null;
-  const priority = choices.filter((e) => e.priority === "high");
-  const pool = priority.length ? priority : choices;
-  return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))]
-    .title;
+  const fits = (t) =>
+    (kind === "all" || t.kind === kind) &&
+    (!genre || t.genres.includes(genre) || (genre === "Sci-Fi" && t.genres.includes("Science Fiction"))) &&
+    (!minutes || !t.runtime || t.runtime <= minutes) &&
+    !library.dismissed?.[t.key];
+  const build = (skip) => {
+    const pool = [];
+    for (const e of Object.values(library.entries || {}))
+      if (["planned", "on-hold"].includes(e.status) && !hasWatched(library, e.title.key) && fits(e.title) && !skip.includes(e.title.key))
+        pool.push({ title: e.title, from: "watchlist", reason: "From your watchlist", w: e.priority === "high" ? 4 : e.priority === "low" ? 1 : 2.5 });
+    suggestions.forEach((s, i) => {
+      const t = s.title;
+      if (!library.entries?.[t.key] && !hasWatched(library, t.key) && fits(t) && !skip.includes(t.key) && !pool.some((p) => p.title.key === t.key))
+        pool.push({ title: t, from: "suggestion", reason: s.reason, w: i < 8 ? 1.6 : 1 });
+    });
+    return pool;
+  };
+  let pool = build(exclude),
+    cycled = false;
+  if (!pool.length && exclude.length) ((pool = build([])), (cycled = true));
+  if (!pool.length) return null;
+  let r = random() * pool.reduce((n, p) => n + p.w, 0);
+  const pick = pool.find((p) => (r -= p.w) <= 0) || pool[pool.length - 1];
+  return { ...pick, cycled, poolSize: pool.length };
 }
 export function scheduledTitles(library, month) {
   return Object.values(library.entries)

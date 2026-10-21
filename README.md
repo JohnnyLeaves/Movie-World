@@ -2,7 +2,7 @@
 
 A personal movie, TV and anime discovery app with a cinematic cyberpunk interface. Built for desktop and mobile browsers with a small Node.js server, native ES modules and **zero runtime dependencies**.
 
-The v2 release expands the original design with a personal observatory, discovery tools, watch diary and collection galleries.
+The app combines discovery, tracking and personal suggestions across movies, series and anime, with the data kept in your own browser.
 
 ## Run locally
 
@@ -16,60 +16,35 @@ Open **http://127.0.0.1:3000**. No install step, build step, database or API key
 
 ## Features
 
-### Your personal observatory
+### Discover
 
-- Overview dashboard with library totals, completed titles, average ratings and estimated logged watch time.
-- Annual viewing challenge with a configurable goal, monthly diary activity and a genre profile.
-- Continue-watching panel with one-click episode logging.
-- Private watch diary with dates, half-point ratings, personal reflections and rewatches.
-- Release calendar combining saved live title dates, next-episode dates and diary activity. Demo dates are never fabricated.
+- **Filter bar** on the explore pages: pick up to four genres (a title must match all of them), a release-year range with decade shortcuts, a minimum score in half-point steps and, for series and anime, an airing status (new, on TV now, ended). Active filters show as removable chips.
+- **Hide titles I have watched** tick box under the filters on Discover, Movies, TV series and Anime. It filters the loaded page and is remembered.
+- **Upcoming** page for movies, series and anime that have not released yet (TMDB for movies and series, AniList for anime). Tap the bell on a card to follow a title; followed titles live on **My upcoming**, grouped into releasing this week, later, to be announced and already out. Discover also shows a **Releasing this week** strip.
+- **For you** builds a separate taste profile for movies and series (TMDB keywords) and for anime (AniList tags), from what you watched, rated and favourited. A watched title counts a little, a 5 a little, 7.5 more, a favourite more again whatever its rating, and a rewatch more still. Low ratings and dropped titles steer away. Candidates come from keyword searches and TMDB's similar-title lists, and each card says why it was picked. Tabs: All, Movies, TV series, Anime.
+- **Tonight, decided** is a small game: three quick questions (mood, time, genre), then one card drawn from your watchlist and your personal suggestions, with **Pick another**.
+- **Title pages** with cast and crew, streaming services you can subscribe to in your region, related titles, an in-app trailer player, seasons and episodes, and a next-episode banner for shows still airing.
+- **People**: click Starring or Created by to browse the cast, then open anyone for their photo, biography, age and credits, sortable by popularity, year or rating.
 
-### Discover your next obsession
+### Track what you watch
 
-- Genre, release-year and minimum community-score filters.
-- Grid and compact list layouts, with one-click watchlist saves.
-- Personal recommendations ranked by the genres in your favourites and highly rated titles, with an explanation for each pick.
-- A “Tonight, decided” picker from your unwatched library, filtered by title type, genre and known runtime. High-priority titles are considered first.
-- Richer title pages with related titles, live season/episode exploration and collapsed episode summaries to reduce accidental spoilers.
-- Regional subscription, free, ad-supported, rental and purchase availability for movies/TV, powered by JustWatch via TMDB. Portugal is the default; eight regions are supported. Confirm availability with the provider before purchasing.
-
-### Build a library worth keeping
-
-- **Not interested** hides a title from discovery, related recommendations and the tonight picker. Restore it from the sidebar list; ratings and watch history stay intact. Hidden titles do not contribute taste signals. Filtering uses canonical provider IDs on the loaded page.
-- **Undo last action** restores the most recent library change, including removals, diary logs, bulk changes and collection edits. Use the toast or sidebar; one undo is kept in memory until another change or page reload. Undo refuses to overwrite a newer update from another tab.
-- **Collection notes** hold up to 2,000 characters for themes, viewing order or shared movie-night plans. Add them when creating or editing a collection; notes appear in its gallery tile and page and survive backup imports.
-
-
-- One-click **Mark watched** controls on title cards and title pages, plus a dedicated **Watched** section.
-- A persistent **Hide watched titles** switch for discovery and library results. It filters the loaded page against saved status and completion history.
-- A **Rewatch list** for titles you want to revisit. Logging a completed rewatch clears its queue flag while retaining previous diary records.
-- Recommendation ranking uses watched titles (including unrated watches), favourites, ratings and repeat watches. Low ratings penalise matching genres, and completed diary history excludes previously watched titles even if they were removed from the library.
-
-- Poster galleries for your custom collections.
-- High/normal/low watchlist priority, searchable personal tags and private notes.
-- Multi-select library organisation: apply watch status, collection membership or favourites to several titles at once.
-- Existing v1 library data migrates automatically; backups retain diary entries, priorities, tags and your annual goal.
-- Service-worker support caches the demo catalogue, bundled artwork and app shell after the first successful visit. The demo and your local library can then open offline. Live search, uncached live artwork and external trailers require connectivity.
-
-### Foundation
-
-- Search and browse movies, TV series and anime, with separate media tabs and provider pagination.
-- Cinematic title details with synopsis, genres, cast, creator, runtime, seasons, episode totals and trailer links when supplied by the provider.
-- Persistent favourites and watchlist.
-- Create, rename and delete collections; a title can belong to multiple collections.
-- Personal ratings in half-point increments from 0.5 to 10.
-- Watch status: want to watch, watching, completed, on hold and dropped.
-- Episode progress for series and anime, plus private notes.
-- Filter the personal library by media type, watch status and title; sort by recently saved, your rating or title.
+- **Mark watched** on cards and title pages. On a card it opens a quick rating box; unmarking works the same way.
+- **Star rating** (half-point steps) on every title page, with the percentage of a series you have watched below it.
+- **Episode tracking**: tick individual episodes or a whole season; the title's status follows (watching, completed, or "up to date" for shows still airing). Each episode shows its runtime, score and date.
+- **Ongoing / Ended** labels for series and anime, with a rewatch option only once everything has been watched and the show has ended.
+- Favourites, a Rewatch list, **Not interested** (hides a title from discovery and suggestions; restore it from its list), collections with notes, multi-select organisation, and a Watchlist page.
+- A dashboard with library totals and an annual goal, and a calendar of next-episode and release dates taken from saved live metadata. Demo dates are never invented.
 - JSON export and validated import with an explicit replacement confirmation.
-- Keyboard navigation, native accessible dialogs, reduced-motion support and responsive layouts.
-- Separate demo/live modes, actionable provider errors and image fallbacks.
 
-For live movie/TV browsing, filters are sent to TMDB's discover API. Live anime filters are sent to AniList. TMDB text-search results, the combined All worlds feed and Jikan fallback results are filtered within the current provider page, as stated beside the controls. Provider totals may therefore exceed the number of matches visible on that page.
+### Interface
 
-Recommendations use the loaded discovery page as their candidate pool and exclude already-saved titles. They are transparent local ranking, not a claim of AI-based or whole-catalogue prediction. Refresh discovers another page in live mode and another slice of the preview pool in demo mode.
+- Black, burgundy and crimson theme with old-gold accents, subtle motion (disabled automatically for reduced-motion users), animated dropdowns that replace the browser's native list, and keyboard-friendly controls.
+- Grid and list layouts, accessible dialogs, responsive layouts and image fallbacks.
+- Service-worker support caches the demo catalogue, bundled artwork and app shell after the first successful visit. The demo and your local library can then open offline. Live search, uncached live artwork and trailers require connectivity.
 
-Logging a finished title marks it completed. Logging a known final episode also marks it completed and counts toward the annual goal. Estimated watch time uses known runtimes; finishing a partly watched series logs only its remaining estimated runtime. Unknown runtimes contribute zero time. Removing a diary entry leaves title status and progress unchanged. Calendar dates refresh when saved live title details are opened.
+For live movie/TV browsing, filters are sent to TMDB's discover API. Live anime filters are sent to AniList. TMDB text-search results, the combined All worlds feed and Jikan fallback results are filtered within the current provider page. Provider totals may therefore exceed the number of matches visible on that page.
+
+Suggestions are a transparent local ranking, not a claim of AI-based or whole-catalogue prediction. Movies and series are never mixed into the anime model, because the two providers use different vocabularies. Demo mode keeps a simpler genre-based version.
 
 ## Enable the full catalogue
 
@@ -98,7 +73,7 @@ The app expects a TMDB **Bearer read token**, not the shorter v3 API key and not
 
 The personal library is stored under `movie-world.library.v1` in **this browser’s localStorage**. It is not sent to TMDB or Jikan. There is no cloud sync, account backend or server-side user database in this MVP. A different browser, profile or origin (including changing ports) has a separate library. Export a JSON backup before clearing browser data or moving devices. Import replaces the current library after confirmation.
 
-The app does not stream video. Trailers, when available, open on YouTube. Live artwork and Google Fonts are fetched from their respective providers, which receive normal browser requests. Demo artwork is bundled locally. Searches and title lookups go through the local server to TMDB/AniList/Jikan. After a successful initial visit and service-worker installation, the app shell, demo search, preview details, bundled artwork and local library are available offline. Live API responses and provider credentials are never placed in the service-worker cache. Browser support and permission to use service workers are required; localhost is supported without HTTPS.
+The app does not stream films or episodes. Trailers, when available, play in an embedded YouTube player (youtube-nocookie.com), which receives a normal browser request; ads inside a trailer are up to YouTube. Live artwork and Google Fonts are fetched from their respective providers, which receive normal browser requests. Demo artwork is bundled locally. Searches and title lookups go through the local server to TMDB/AniList/Jikan. After a successful initial visit and service-worker installation, the app shell, demo search, preview details, bundled artwork and local library are available offline. Live API responses and provider credentials are never placed in the service-worker cache. Browser support and permission to use service workers are required; localhost is supported without HTTPS.
 
 ## APIs and licensing
 
@@ -120,9 +95,9 @@ npm run check
 npm test
 ```
 
-`npm ci` installs development-only test dependencies. It is unnecessary for running the app. In addition to the Node tests, a Happy DOM integration test exercises the app's filters, title controls, watch logging, annual goals, collection membership, bulk organisation and navigation in an isolated in-memory DOM. It does not replace visual browser QA.
+`npm ci` installs development-only test dependencies. It is unnecessary for running the app. In addition to the Node tests, a Happy DOM integration test exercises the filter bar, rating, watched and rewatch controls, collections, hide-watched, dismissal, the tonight game and navigation in an isolated in-memory DOM. It does not replace visual browser QA.
 
-The automated tests cover library persistence/backup round trips, title updates, collection lifecycle, filtering, import validation, provider normalization, demo search, authorization headers, cache reuse, upstream failure handling, and actual HTTP routes, validation, static files and security headers. Tests mock upstream catalogue services; live TMDB verification requires your read token.
+The automated tests cover taste weights, ranking and the tonight pick, library persistence/backup round trips, title updates, collection lifecycle, filtering, import validation, provider normalization, demo search, authorization headers, cache reuse, upstream failure handling, and actual HTTP routes, validation, static files and security headers. Tests mock upstream catalogue services; live TMDB verification requires your read token.
 
 ## Structure
 
@@ -130,6 +105,9 @@ The automated tests cover library persistence/backup round trips, title updates,
 public/            Browser UI, CSS, icons and manifest
 public/js/app.js    View rendering, dialogs, routes and interactions
 public/js/library.js  Pure library operations and backup validation
+public/js/insights.js  Taste profiles, ranking, tonight pick, stats
+public/js/select-menu.js  Animated dropdown lists
+public/theme.css   Colour theme, motion and the newer components
 server/index.js    HTTP server, static assets, API routes and security headers
 server/catalog.js  TMDB / AniList / Jikan adapters, cache and request scheduling
 server/demo.js     Editorial preview catalogue

@@ -12,15 +12,17 @@ export const emptyLibrary = () => ({
   entries: {},
   diary: [],
   dismissed: {},
+  interested: {},
   goal: 52,
   folders: [
     { id: "next-up", name: "Next up", notes: "" },
     { id: "mind-benders", name: "Mind-benders", notes: "" },
   ],
 });
+// Only known image hosts, and no characters that could break out of an HTML attribute or a CSS url().
 const safeImage = (value) =>
   typeof value === "string" &&
-  (/^https:\/\/(image\.tmdb\.org|cdn\.myanimelist\.net|s[1-4]\.anilist\.co)\//.test(
+  (/^https:\/\/(image\.tmdb\.org|cdn\.myanimelist\.net|s[1-4]\.anilist\.co)\/[^\s'"()<>\\]*$/.test(
     value,
   ) ||
     /^\/assets\/(?:posters\/(?:movie|tv|anime)-\d+|spotlight)\.jpg$/.test(
@@ -74,6 +76,18 @@ export function validateTitle(t) {
       ? { nextAirDate: t.nextAirDate.slice(0, 10) }
       : {}),
     ...(typeof t.status === "string" ? { status: t.status.slice(0, 80) } : {}),
+    // TMDB keywords / AniList tags used to build the taste profile.
+    ...(Array.isArray(t.keywords)
+      ? {
+          keywords: t.keywords
+            .filter((k) => k && typeof k.name === "string" && k.name.trim())
+            .slice(0, 25)
+            .map((k) => ({
+              ...(Number.isInteger(k.id) ? { id: k.id } : {}),
+              name: k.name.trim().slice(0, 60),
+            })),
+        }
+      : {}),
   };
 }
 export function parseLibrary(text) {
@@ -120,6 +134,20 @@ export function parseLibrary(text) {
     const title = validateTitle(raw);
     dismissed[title.key] = title;
   }
+  // Upcoming titles the user wants to follow; kept apart from the main watchlist.
+  if (
+    data.interested !== undefined &&
+    (!data.interested ||
+      typeof data.interested !== "object" ||
+      Array.isArray(data.interested) ||
+      Object.keys(data.interested).length > 2000)
+  )
+    throw new Error("Invalid upcoming list.");
+  const interested = {};
+  for (const raw of Object.values(data.interested || {})) {
+    const title = validateTitle(raw);
+    interested[title.key] = title;
+  }
   const entries = {};
   for (const raw of Object.values(data.entries)) {
     const title = validateTitle(raw.title),
@@ -144,6 +172,27 @@ export function parseLibrary(text) {
         ? [...new Set(raw.folders.filter((id) => ids.has(id)))]
         : [],
       progress: Math.max(0, Math.floor(Number(raw.progress) || 0)),
+      // Episodes watched per season: { "1": [1, 2, 5] }. Absent means "derive from progress".
+      ...(raw.seen && typeof raw.seen === "object" && !Array.isArray(raw.seen)
+        ? {
+            seen: Object.fromEntries(
+              Object.entries(raw.seen)
+                .filter(([k]) => /^\d{1,3}$/.test(k))
+                .slice(0, 200)
+                .map(([k, v]) => [
+                  k,
+                  Array.isArray(v)
+                    ? [
+                        ...new Set(
+                          v.filter((n) => Number.isInteger(n) && n > 0 && n < 5000),
+                        ),
+                      ].sort((a, b) => a - b)
+                    : [],
+                ])
+                .filter(([, v]) => v.length),
+            ),
+          }
+        : {}),
       priority: ["low", "normal", "high"].includes(raw.priority)
         ? raw.priority
         : "normal",
@@ -175,6 +224,7 @@ export function parseLibrary(text) {
     version: 1,
     entries,
     dismissed,
+    interested,
     folders,
     diary,
     goal:
@@ -221,6 +271,14 @@ export function saveTitle(library, title, patch = {}) {
       },
     },
   };
+}
+export function toggleInterested(library, title) {
+  const interested = { ...(library.interested || {}) };
+  if (interested[title.key]) delete interested[title.key];
+  else if (Object.keys(interested).length >= 2000)
+    throw new Error("Your upcoming list supports up to 2,000 titles.");
+  else interested[title.key] = validateTitle(title);
+  return { ...library, interested };
 }
 export function removeTitle(library, key) {
   const entries = { ...library.entries };

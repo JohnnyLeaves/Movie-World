@@ -9,10 +9,10 @@
   gap: 4px;
   align-items: center;
   padding: 5px 7px;
-  border: 1px solid #493454;
+  border: 1px solid #412127;
   border-radius: 4px;
-  background: #211629;
-  color: #b49bc2;
+  background: #1e0f12;
+  color: #c598a0;
   font-size: 8px;
 }
 .watch-card-actions .icon {
@@ -22,42 +22,13 @@
 .watch-card-actions button.has-watched {
   opacity: 1;
   color: var(--lime);
-  border-color: #bcf77c44;
-  background: #bcf77c08;
+  border-color: #f5476a44;
+  background: #f5476a08;
   cursor: default;
 }
 .watch-card-actions button.queued {
   color: var(--violet);
-  border-color: #b29aff88;
-}
-.hide-watched-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #c9b7d4;
-  margin: 5px 0 18px;
-}
-.hide-watched-control input {
-  width: 15px;
-  height: 15px;
-  min-width: 15px;
-  padding: 0;
-  margin: 0;
-  accent-color: var(--lime);
-}
-.hide-watched-control small {
-  color: #846d94;
-  font-size: 8px;
-  margin-left: 4px;
-}
-.watch-detail-actions {
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-  padding-bottom: 17px;
-  border-bottom: 1px solid #493454;
+  border-color: #ff9aaf88;
 }
 .list-view .watch-card-actions {
   grid-column: 2;
@@ -66,21 +37,8 @@
   display: none;
 }
 @media (max-width: 620px) {
-  .hide-watched-control {
-    flex-wrap: wrap;
-    font-size: 10px;
-  }
-  .hide-watched-control small {
-    flex-basis: 100%;
-    padding-left: 19px;
+      .watch-card-actions button {
     font-size: 8px;
-  }
-  .watch-card-actions button {
-    font-size: 8px;
-  }
-  .watch-detail-actions .button {
-    font-size: 10px;
-    padding: 8px 10px;
   }
 }
 
@@ -118,6 +76,196 @@
 #folder-notes {
   margin: 8px 0 12px;
 }
-.dialog-undo {
-  margin-top: 18px;
+
+/* Card quick actions: kebab + heart on top, watched + save on the bottom. */
+.quick-favorite {
+  right: 42px;
+}
+.quick-more,
+.quick-watched {
+  position: absolute;
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  background: #11090acc;
+  border: 1px solid #ffffff1c;
+  backdrop-filter: blur(8px);
+  color: #e0d0d3;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.quick-more {
+  top: 8px;
+  right: 7px;
+  background: none;
+  border: 0;
+  backdrop-filter: none;
+  color: #ffffff;
+}
+.quick-more .icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 4;
+  filter: drop-shadow(0 1px 2px #000000cc);
+}
+.quick-watched {
+  bottom: 8px;
+  right: 43px;
+  border-radius: 6px;
+}
+.quick-watched .icon {
+  width: 14px;
+  height: 14px;
+}
+.quick-watched.is-watched {
+  opacity: 1;
+  color: #f5476a;
+  background: #2e0d14ee;
+}
+.title-card:hover .quick-more,
+.title-card:hover .quick-watched,
+.title-card:focus-within .quick-more,
+.title-card:focus-within .quick-watched,
+.poster-wrap.menu-open .quick-more {
+  opacity: 1;
+}
+.card-menu {
+  display: none;
+  position: absolute;
+  top: 42px;
+  right: 7px;
+  z-index: 3;
+  min-width: 120px;
+  padding: 4px;
+  background: #190d0ff2;
+  border: 1px solid #2a161a;
+  border-radius: 6px;
+}
+.poster-wrap.menu-open .card-menu {
+  display: block;
+}
+.card-menu button {
+  width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  font-size: 11px;
+  color: #e0d0d3;
+  border-radius: 4px;
+}
+.card-menu button:hover,
+.card-menu button:focus-visible {
+  background: #ffffff12;
+}
+.list-view .quick-favorite {
+  right: 29px;
+}
+.list-view .quick-more,
+.list-view .quick-watched {
+  width: 22px;
+  height: 22px;
+  opacity: 1;
+}
+.list-view .quick-more {
+  top: 3px;
+  right: 3px;
+}
+.list-view .quick-watched {
+  bottom: 3px;
+  right: 29px;
+}
+.list-view .card-menu {
+  top: 28px;
+  right: 3px;
+}
+@media (hover: none), (max-width: 760px) {
+  .quick-more,
+  .quick-watched {
+    opacity: 1;
+  }
+}
+
+/* "Your corner of the universe": summary button in the detail view, full panel in an overlay. */
+
+.detail-actions.watch-actions {
+  margin-top: 8px;
+}
+.detail-actions.watch-actions .button {
+  padding: 6px 10px;
+  font-size: 9px;
+  color: #aa999d;
+  background: #ffffff0a;
+  border-color: #ffffff12;
+}
+.detail-actions.watch-actions .button:hover {
+  color: var(--text);
+  background: #ffffff12;
+}
+.detail-actions.watch-actions .button.is-on {
+  color: var(--lime);
+  background: #f5476a08;
+  border-color: #f5476a44;
+}
+.detail-actions.watch-actions .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.watch-detail-actions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #412127;
+}
+
+.air-tag {
+  padding: 1px 6px;
+  color: #aa999d;
+  background: #ffffff0a;
+  border-radius: 999px;
+  font-size: 9px;
+}
+.air-tag.ongoing {
+  color: var(--lime);
+  background: #f5476a12;
+}
+.detail-meta .air-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+.where-to-watch {
+  margin: 20px 0 0;
+}
+.where-to-watch .provider-group {
+  margin-bottom: 12px;
+}
+.where-to-watch .text-link,
+.where-to-watch .panel-empty {
+  font-size: 10px;
+}
+.where-to-watch .small-print {
+  margin: 10px 0 0;
+  font-size: 9px;
+  color: #7e696d;
+}
+.where-to-watch .small-print a {
+  color: #aa999d;
+  text-decoration: underline;
+}
+
+.detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 20px 0;
+}
+.detail-row .where-to-watch {
+  flex: 1 1 280px;
+  min-width: 0;
+  margin: 0;
 }

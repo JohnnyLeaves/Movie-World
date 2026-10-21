@@ -9,6 +9,8 @@ import {
   renameFolder,
   parseLibrary,
   filterEntries,
+  toggleInterested,
+  validateTitle,
 } from "../public/js/library.js";
 import { demoTitles } from "../server/demo.js";
 
@@ -111,4 +113,20 @@ test("not-interested backups preserve canonical identity without saving a watch 
     () => parseLibrary(JSON.stringify({ ...lib, dismissed: [] })),
     /not-interested/,
   );
+});
+
+test("followed upcoming titles, episode records and keywords survive a backup and are validated", () => {
+  const show = { ...demoTitles[12], keywords: [{ id: 5, name: "heist" }, { name: "  " }, { id: "x", name: "chef" }] };
+  assert.deepEqual(validateTitle(show).keywords, [{ id: 5, name: "heist" }, { name: "chef" }]);
+  let lib = toggleInterested(emptyLibrary(), show);
+  assert.ok(lib.interested[show.key]);
+  lib = saveTitle(lib, show, { seen: { 1: [3, 1, 1, 2] }, progress: 3 });
+  const restored = parseLibrary(JSON.stringify(lib));
+  assert.deepEqual(Object.keys(restored.interested), [show.key]);
+  assert.deepEqual(restored.entries[show.key].seen, { 1: [1, 2, 3] }, "episode numbers are de-duplicated and sorted");
+  assert.deepEqual(toggleInterested(lib, show).interested, {}, "toggling again unfollows");
+  assert.throws(() => parseLibrary(JSON.stringify({ ...lib, interested: [] })), /upcoming list/);
+  // libraries saved before these features existed still load
+  const { interested, ...old } = JSON.parse(JSON.stringify(lib));
+  assert.deepEqual(parseLibrary(JSON.stringify(old)).interested, {});
 });

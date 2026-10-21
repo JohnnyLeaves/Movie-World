@@ -11,22 +11,56 @@ const monthName = (date) =>
     month: "long",
     year: "numeric",
   });
-export function filterBar({ filters, esc, query, route, mode }) {
-  const active = filters.genre || filters.year || Number(filters.minScore);
-  return `<div class="discovery-filters"><label>Genre<select id="discovery-genre"><option value="">Every genre</option>${GENRES.map((g) => `<option ${filters.genre === g ? "selected" : ""}>${esc(g)}</option>`).join("")}</select></label><label>Release year<input id="discovery-year" type="number" min="1900" max="${new Date().getFullYear() + 5}" value="${esc(filters.year)}" placeholder="Any year"/></label><label>Minimum score<select id="discovery-score">${[
-    [0, "Any score"],
-    [6, "6+ / Good"],
-    [7, "7+ / Great"],
-    [8, "8+ / Exceptional"],
-    [9, "9+ / Essential"],
-  ]
-    .map(
-      ([v, l]) =>
-        `<option value="${v}" ${Number(filters.minScore) === v ? "selected" : ""}>${l}</option>`,
-    )
-    .join(
-      "",
-    )}</select></label><button class="button secondary" data-action="clear-filters" ${active ? "" : "disabled"}>Reset filters</button><span class="filter-note">${query && mode === "live" ? "Filters refine this search page. Browse without search for catalogue-wide filters." : route === "discover" && mode === "live" ? "Choose a title type for catalogue-wide filters. All worlds filters refine this feed page." : "A smaller universe. A better discovery."}</span></div>`;
+// "This week" is the rolling window from today through the next six days.
+export function weekRange() {
+  const start = new Date(`${today()}T12:00:00`),
+    end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const f = (d) => d.toISOString().slice(0, 10);
+  return [f(start), f(end)];
+}
+const DECADES = [
+  ["2020s", 2020, 2029],
+  ["2010s", 2010, 2019],
+  ["2000s", 2000, 2009],
+  ["1990s", 1990, 1999],
+  ["Classics", 1900, 1989],
+];
+const AIRING = [
+  ["", "Any"],
+  ["new", "New"],
+  ["airing", "On TV now"],
+  ["ended", "Ended"],
+];
+// Collapsible filter bar: a toggle with a count, removable chips for what is active, and a panel
+// with genre chips, a year range with decade shortcuts, a score slider and (series/anime) airing status.
+export function filterBar({ filters, esc, icon, query, route, mode, open, hideWatched = false, explore = false }) {
+  const score = Number(filters.minScore) || 0,
+    showAiring = mode === "live" && (route === "tv" || route === "anime"),
+    years =
+      filters.yearFrom || filters.yearTo
+        ? filters.yearFrom && filters.yearTo
+          ? filters.yearFrom === filters.yearTo
+            ? filters.yearFrom
+            : `${filters.yearFrom}\u2013${filters.yearTo}`
+          : filters.yearFrom
+            ? `From ${filters.yearFrom}`
+            : `Until ${filters.yearTo}`
+        : "",
+    active = [
+      ...filters.genres.map((g) => ["genre", g, g]),
+      ...(years ? [["year", "", years]] : []),
+      ...(score ? [["score", "", `${score.toFixed(1)}+ score`]] : []),
+      ...(showAiring && filters.airing ? [["airing", "", AIRING.find(([v]) => v === filters.airing)?.[1] || ""]] : []),
+    ];
+  const isDecade = (from, to) => Number(filters.yearFrom) === from && Number(filters.yearTo) === to;
+  const note =
+    query && mode === "live"
+      ? "Filters refine this search page. Browse without search for catalogue-wide filters."
+      : route === "discover" && mode === "live"
+        ? "Choose a title type for catalogue-wide filters. All worlds filters refine this feed page."
+        : "";
+  return `<div class="filters-bar"><div class="filters-top"><button class="filters-toggle ${open ? "open" : ""}" data-action="filters-toggle" aria-expanded="${open}" aria-controls="filters-panel">${icon("sliders")}<span>Filters</span>${active.length ? `<b>${active.length}</b>` : ""}${icon("chevron")}</button>${active.map(([kind, value, label]) => `<button class="fchip" data-action="filter-remove" data-kind="${kind}" data-value="${esc(value)}" aria-label="Remove filter ${esc(label)}">${esc(label)}${icon("close")}</button>`).join("")}${active.length ? '<button class="filters-reset" data-action="clear-filters">Reset all</button>' : ""}</div>${explore ? `<label class="hide-watched"><input type="checkbox" id="hide-watched" ${hideWatched ? "checked" : ""}/><i class="tick" aria-hidden="true"></i><span>Hide titles I have watched</span></label>` : ""}<div id="filters-panel" class="filters-panel ${open ? "open" : ""}"><div class="filters-inner"><div class="filters-grid"><section class="fsec wide"><span class="flabel">Genres <small>pick up to four</small></span><div class="chip-row">${GENRES.map((g) => `<button class="gchip ${filters.genres.includes(g) ? "on" : ""}" data-action="filter-genre" data-genre="${esc(g)}" aria-pressed="${filters.genres.includes(g)}">${esc(g)}</button>`).join("")}</div></section><section class="fsec"><span class="flabel">Release year</span><div class="year-row"><input id="filter-year-from" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear() + 5}" value="${esc(filters.yearFrom)}" placeholder="From" aria-label="From year"/><i>\u2013</i><input id="filter-year-to" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear() + 5}" value="${esc(filters.yearTo)}" placeholder="To" aria-label="To year"/></div><div class="chip-row">${DECADES.map(([l, from, to]) => `<button class="gchip small ${isDecade(from, to) ? "on" : ""}" data-action="filter-decade" data-from="${from}" data-to="${to}" aria-pressed="${isDecade(from, to)}">${l}</button>`).join("")}</div></section><section class="fsec"><span class="flabel">Minimum score <output id="filter-score-out">${score ? `${score.toFixed(1)}+` : "Any"}</output></span><input id="filter-score" class="score-range" type="range" min="0" max="9" step="0.5" value="${score}" style="--p:${(score / 9) * 100}%" aria-label="Minimum score"/><div class="range-ticks"><span>Any</span><span>5</span><span>7</span><span>9+</span></div></section>${showAiring ? `<section class="fsec"><span class="flabel">Airing</span><div class="chip-row">${AIRING.map(([v, l]) => `<button class="gchip small ${filters.airing === v ? "on" : ""}" data-action="filter-airing" data-value="${v}" aria-pressed="${filters.airing === v}">${l}</button>`).join("")}</div></section>` : ""}</div>${note ? `<p class="filter-note">${note}</p>` : ""}</div></div></div>`;
 }
 export function renderExperience({
   route,
@@ -35,6 +69,8 @@ export function renderExperience({
   icon,
   card,
   candidates = [],
+  forYou = null,
+  tab = "all",
   month = today().slice(0, 7),
   query = "",
   offset = 0,
@@ -137,52 +173,122 @@ export function renderExperience({
       head(
         "YOUR SCREEN CALENDAR",
         "Stories on the horizon.",
-        "Saved-title release dates, next episodes and your watch diary in one place.",
+        "New episodes, upcoming releases and what you have watched, all in one place.",
       ) +
-      `<section class="feature-panel"><div class="calendar-heading"><button class="icon-button" data-action="calendar-prev" aria-label="Previous month">${icon("chevron", "reverse")}</button><h2>${monthName(month)}</h2><button class="icon-button" data-action="calendar-next" aria-label="Next month">${icon("chevron")}</button></div><div class="calendar-legend"><span>Upcoming release / episode</span><span>Logged watch</span></div><div class="calendar-grid">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<b>${d}</b>`).join("")}${Array.from({ length: offset }, () => '<div class="calendar-blank"></div>').join("")}${Array.from(
+      `<section class="feature-panel"><div class="calendar-heading"><button class="icon-button" data-action="calendar-prev" aria-label="Previous month">${icon("chevron", "reverse")}</button><h2>${monthName(month)}</h2><button class="icon-button" data-action="calendar-next" aria-label="Next month">${icon("chevron")}</button></div><div class="calendar-legend"><span>Coming up</span><span>Watched</span></div><div class="calendar-grid">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<b>${d}</b>`).join("")}${Array.from({ length: offset }, () => '<div class="calendar-blank"></div>').join("")}${Array.from(
         { length: days },
         (_, i) => {
           const day = `${month}-${String(i + 1).padStart(2, "0")}`,
             ev = events.filter((e) => e.date === day),
             watched = logs.filter((e) => e.date === day);
-          return `<div class="calendar-day ${day === today() ? "is-today" : ""}"><strong>${i + 1}</strong>${ev
+          return `<div class="calendar-day ${day === today() ? "is-today" : ""} ${ev.length > 1 ? "multi" : ""}"><strong>${i + 1}</strong>${ev
             .slice(0, 2)
             .map(
               (e) =>
-                `<button title="${esc(e.title.title)}" data-action="detail" data-key="${esc(e.title.key)}">${esc(e.title.title)}</button>`,
+                `<button title="${esc(e.title.title)}" data-action="detail" data-key="${esc(e.title.key)}"${e.title.poster ? ` style="--poster:url('${esc(e.title.poster)}')"` : ""}><span>${esc(e.title.title)}</span></button>`,
             )
             .join(
               "",
-            )}${watched.length ? `<span title="${watched.map((l) => esc(l.title)).join(", ")}">${watched.length} watch${watched.length > 1 ? "es" : ""}</span>` : ""}</div>`;
+            )}${ev.length > 2 ? `<em title="${ev.slice(2).map((e) => esc(e.title.title)).join(", ")}">+${ev.length - 2} more</em>` : ""}${watched.length ? `<span title="${watched.map((l) => esc(l.title)).join(", ")}">${watched.length > 1 ? `${watched.length} watched` : "Watched"}</span>` : ""}</div>`;
         },
       ).join(
         "",
       )}</div><p class="small-print">Release and next-episode dates come from saved live title metadata. Open a live title to refresh it. No release dates are invented for demo titles.</p></section>`;
-  } else if (route === "recommendations") {
-    const picks = recommendTitles(library, candidates, 24).slice(
-      offset,
-      offset + 12,
-    );
+  } else if (route === "interested") {
+    const [from, to] = weekRange(),
+      list = Object.values(library.interested || {}),
+      dated = (t) => /^\d{4}-\d{2}-\d{2}$/.test(t.releaseDate || ""),
+      byDate = (a, b) => a.releaseDate.localeCompare(b.releaseDate),
+      groups = [
+        ["Releasing this week", list.filter((t) => dated(t) && t.releaseDate >= from && t.releaseDate <= to).sort(byDate)],
+        ["Coming later", list.filter((t) => dated(t) && t.releaseDate > to).sort(byDate)],
+        ["Date to be announced", list.filter((t) => !dated(t))],
+        ["Already out", list.filter((t) => dated(t) && t.releaseDate < from).sort((a, b) => byDate(b, a))],
+      ].filter(([, items]) => items.length);
     content =
       head(
-        "CURATED BY YOUR TASTE",
-        "A little more you.",
-        "Your watched history, ratings, favourites and rewatches shape these picks. Low ratings reduce similar suggestions.",
-        `<button class="button secondary" data-action="refresh-recommendations">${icon("compass")} Refresh discovery</button>`,
+        "YOUR RELEASE RADAR",
+        "Never miss a premiere.",
+        "Upcoming titles you follow, with this week's releases first. Tap the bell on any title in Upcoming to add it here.",
+        '<a class="button secondary" href="#upcoming">' + icon("spark") + " Browse upcoming</a>",
       ) +
-      `<div class="taste-chips">${
-        stats.genres
-          .slice(0, 5)
-          .map(([g]) => `<span>${esc(g)}</span>`)
-          .join("") ||
-        "<span>Rate or favourite a few titles to personalise these picks</span>"
-      }</div>` +
-      (picks.length
-        ? `<div class="title-grid recommendation-grid">${picks.map((p) => `<div>${card(p.title)}<p class="recommendation-reason">${icon("star")} ${esc(p.reason)}</p></div>`).join("")}</div>`
-        : empty(
-            "More discoveries are on their way.",
-            "Try refreshing the catalogue, or switch to live mode for a larger pool of suggestions.",
-          ));
+      (groups.length
+        ? groups
+            .map(
+              ([label, items]) =>
+                `<section class="radar-group"><h3 class="radar-label">${label}<span>${items.length}</span></h3><div class="title-grid">${items.map((t) => card(t, true)).join("")}</div></section>`,
+            )
+            .join("")
+        : `<div class="empty-state">${icon("bell")}<h3>Nothing on your radar yet.</h3><p>Open Upcoming and tap the bell on the movies, series and anime you are waiting for.</p><a href="#upcoming" class="button primary">Browse upcoming ${icon("arrow")}</a></div>`);
+  } else if (route === "recommendations") {
+    if (forYou) {
+      const sections = [
+        ["Movies", "movie"],
+        ["Series", "tv"],
+        ["Anime", "anime"],
+      ].filter(([, k]) => forYou[k]?.length && (tab === "all" || tab === k));
+      const tabs = `<nav class="type-tabs segmented" aria-label="Suggestion type">${[
+        ["all", "All", "recommendations"],
+        ["movie", "Movies", "recommendations/movie"],
+        ["tv", "TV series", "recommendations/tv"],
+        ["anime", "Anime", "recommendations/anime"],
+      ]
+        .map(([k, l, h]) => `<a class="${tab === k ? "selected" : ""}" href="#${h}">${l}${k === "anime" ? "<span>\u30a2\u30cb\u30e1</span>" : ""}</a>`)
+        .join("")}</nav>`;
+      const chips = (label, names) =>
+        names.length
+          ? `<div class="taste-chips"><b>${label}</b>${names.map((n) => `<span>${esc(n)}</span>`).join("")}</div>`
+          : "";
+      content =
+        head(
+          "CURATED BY YOUR TASTE",
+          "A little more you.",
+          "Built from what you watched, rated and favourited. Movies and series are matched on TMDB keywords, anime on AniList tags.",
+          `<button class="button secondary" data-action="refresh-recommendations">${icon("compass")} Show different picks</button>`,
+        ) +
+        tabs +
+        (forYou.taste.tmdb.length || forYou.taste.anime.length
+          ? (tab === "anime" ? "" : chips("Movies & series", forYou.taste.tmdb)) + (tab === "movie" || tab === "tv" ? "" : chips("Anime", forYou.taste.anime))
+          : '<div class="taste-chips"><span>Rate or favourite a few titles to tune these picks</span></div>') +
+        (sections.length
+          ? sections
+              .map(
+                ([label, k]) => {
+                  const list = forYou[k],
+                    count = tab === "all" ? 4 : 12,
+                    from = offset % Math.max(count, list.length),
+                    shown = list.slice(from, from + count).concat(from + count > list.length ? list.slice(0, from + count - list.length) : []).slice(0, count);
+                  return `<section class="radar-group"><h3 class="radar-label">${label}<span>${shown.length}</span></h3><div class="title-grid recommendation-grid">${shown.map((p) => `<div>${card(p.title)}<p class="recommendation-reason">${icon("star")} ${esc(p.reason)}</p></div>`).join("")}</div></section>`;
+                },
+              )
+              .join("")
+          : empty("Nothing to suggest yet.", "Rate or favourite a few titles you love and check back."));
+    } else {
+    const picks = recommendTitles(library, candidates, 24).slice(
+        offset,
+        offset + 12,
+      );
+      content =
+        head(
+          "CURATED BY YOUR TASTE",
+          "A little more you.",
+          "Your watched history, ratings, favourites and rewatches shape these picks. Low ratings reduce similar suggestions.",
+          `<button class="button secondary" data-action="refresh-recommendations">${icon("compass")} Refresh discovery</button>`,
+        ) +
+        `<div class="taste-chips">${
+          stats.genres
+            .slice(0, 5)
+            .map(([g]) => `<span>${esc(g)}</span>`)
+            .join("") ||
+          "<span>Rate or favourite a few titles to personalise these picks</span>"
+        }</div>` +
+        (picks.length
+          ? `<div class="title-grid recommendation-grid">${picks.map((p) => `<div>${card(p.title)}<p class="recommendation-reason">${icon("star")} ${esc(p.reason)}</p></div>`).join("")}</div>`
+          : empty(
+              "More discoveries are on their way.",
+              "Try refreshing the catalogue, or switch to live mode for a larger pool of suggestions.",
+            ));
+    }
   }
   return `<section class="catalog-section experience-page">${content}</section>`;
 }
@@ -195,29 +301,7 @@ export function detailExtras({
   region = "PT",
   watched = false,
 }) {
-  return `<section class="detail-tools"><div class="watch-detail-actions"><button class="button ${watched ? "secondary" : "primary"}" data-action="mark-watched" ${watched ? "disabled" : ""}>${icon("check")} ${watched ? "Watched" : "Mark as watched"}</button>${watched ? `<button class="button secondary" data-action="queue-rewatch" aria-pressed="${Boolean(entry?.rewatchQueued)}">${icon("clock")} ${entry?.rewatchQueued ? "Remove from rewatch list" : "Want to rewatch"}</button>` : ""}</div><div class="panel-heading"><h3>Make it yours</h3><button class="button primary" data-action="log-watch">${icon("check")} Log a watch</button></div><div class="personal-fields"><label>Watchlist priority<select id="detail-priority">${["low", "normal", "high"].map((v) => `<option value="${v}" ${(entry?.priority || "normal") === v ? "selected" : ""}>${v[0].toUpperCase() + v.slice(1)}</option>`).join("")}</select></label><label>Personal tags<input id="detail-tags" maxlength="250" value="${esc(entry?.tags?.join(", ") || "")}" placeholder="comfort watch, mind-bending"/></label></div>${title.kind !== "movie" ? `<div class="episode-controls"><span>${entry?.progress || 0}${title.episodes ? ` / ${title.episodes}` : ""} episodes watched</span><button class="button secondary" data-action="next-episode">${icon("plus")} Log next episode</button></div>` : ""}</section>
-  ${
-    title.source === "tmdb"
-      ? `<section class="feature-panel availability-section"><div class="panel-heading"><h3>Where to watch</h3><label class="sr-only" for="watch-region">Streaming region</label><select id="watch-region">${[
-          ["PT", "Portugal"],
-          ["US", "United States"],
-          ["GB", "United Kingdom"],
-          ["ES", "Spain"],
-          ["FR", "France"],
-          ["DE", "Germany"],
-          ["JP", "Japan"],
-          ["BR", "Brazil"],
-        ]
-          .map(
-            ([v, l]) =>
-              `<option value="${v}" ${v === region ? "selected" : ""}>${l}</option>`,
-          )
-          .join(
-            "",
-          )}</select></div><div id="watch-availability"><p class="panel-empty">${title.demo ? "Connect TMDB and open this title in live mode for regional streaming, rental and purchase options." : "Loading regional availability..."}</p></div><p class="small-print">Availability data: <a href="https://www.justwatch.com" target="_blank" rel="noopener noreferrer">JustWatch</a> via TMDB. Availability may change; confirm with the provider.</p></section>`
-      : ""
-  }
-  ${
+  return `${
     title.kind === "tv"
       ? `<section class="feature-panel seasons-section"><div class="panel-heading"><h3>Seasons & episodes</h3>${
           title.seasonList?.length
@@ -232,6 +316,5 @@ export function detailExtras({
         }</div><div id="season-episodes"><p class="panel-empty">${title.demo ? "Season-level episode information is available with a live TMDB connection." : "Choose a season to explore episode names, air dates and spoiler-protected summaries."}</p></div></section>`
       : ""
   }
-  ${title.nextAirDate ? `<div class="next-airing">${icon("clock")} Next episode: ${esc(title.nextAirDate)}${title.nextEpisode ? ` &middot; ${esc(title.nextEpisode)}` : ""}</div>` : ""}
   ${title.recommendations?.length ? `<section class="related-section"><div class="panel-heading"><h3>More from this universe</h3><span>${title.demo ? "Genre matches in the demo catalogue" : "Provider recommendations"}</span></div><div class="related-grid">${title.recommendations.slice(0, 6).map(card).join("")}</div></section>` : ""}`;
 }

@@ -54,7 +54,27 @@ export function normalizeTmdb(item, kind) {
     runtime: item.runtime || item.episode_run_time?.[0] || null,
     seasons: item.number_of_seasons || null,
     episodes: item.number_of_episodes || null,
+    // TMDB keywords (ids let us discover similar titles); only present on detail responses.
+    keywords: (item.keywords?.keywords || item.keywords?.results || [])
+      .slice(0, 20)
+      .map((k) => ({ id: k.id, name: k.name })),
     cast: item.credits?.cast?.slice(0, 8).map((p) => p.name) || [],
+    // People with ids so the UI can open a profile; only present on full detail responses.
+    castList: (item.credits?.cast || []).slice(0, 14).map((p) => ({
+      id: p.id,
+      name: p.name,
+      role: p.character || "",
+      photo: p.profile_path ? `https://image.tmdb.org/t/p/w185${p.profile_path}` : "",
+    })),
+    creatorList: (type === "movie"
+      ? (item.credits?.crew || []).filter((p) => p.job === "Director")
+      : item.created_by || []
+    ).map((p) => ({
+      id: p.id,
+      name: p.name,
+      role: type === "movie" ? "Director" : "Creator",
+      photo: p.profile_path ? `https://image.tmdb.org/t/p/w185${p.profile_path}` : "",
+    })),
     creator:
       item.credits?.crew?.find((p) => p.job === "Director")?.name ||
       item.created_by?.map((p) => p.name).join(", ") ||
@@ -126,6 +146,12 @@ export function normalizeAnilist(item) {
     backdrop: item.bannerImage || "",
     overview: text || "No synopsis available yet.",
     genres: item.genres || [],
+    // AniList community tags, strongest first; spoiler tags are skipped.
+    keywords: (item.tags || [])
+      .filter((t) => !t.isMediaSpoiler && t.rank >= 50)
+      .sort((a, b) => b.rank - a.rank)
+      .slice(0, 15)
+      .map((t) => ({ name: t.name })),
     runtime: item.duration || null,
     seasons: null,
     episodes: item.episodes || null,
@@ -153,6 +179,9 @@ export function normalizeAnilist(item) {
       .map(normalizeAnilist),
   };
 }
+
+const daysAgo = (n, clock = Date.now) =>
+  new Date(clock() - n * 864e5).toISOString().slice(0, 10);
 
 export function createCatalog({
   token = "",
@@ -219,8 +248,12 @@ export function createCatalog({
       true,
     );
   const animeFields =
-    "idMal title { english romaji } startDate { year month day } status nextAiringEpisode { airingAt episode } averageScore coverImage { large } bannerImage description(asHtml: false) genres duration episodes studios(isMain: true) { nodes { name } } trailer { id site }";
+    "idMal title { english romaji } startDate { year month day } status nextAiringEpisode { airingAt episode } averageScore coverImage { large } bannerImage description(asHtml: false) genres tags { name rank isMediaSpoiler } duration episodes studios(isMain: true) { nodes { name } } trailer { id site }";
   async function anilist(query, variables) {
+    // AniList rejects explicit nulls on filter args ("Illegal operator and value combination").
+    variables = Object.fromEntries(
+      Object.entries(variables).filter(([, v]) => v != null),
+    );
     const key = JSON.stringify({ query, variables });
     const cached = cache.get(key);
     if (cached && cached.expires > clock()) return cached.value;
@@ -269,27 +302,40 @@ export function createCatalog({
     query,
     sort,
     limit = 24,
-    genre = "",
-    year = "",
+    genre = [],
+    yearFrom = "",
+    yearTo = "",
     minScore = 0,
+    airing = "",
   }) {
+    // Date window from the airing filter, narrowed by the year range (FuzzyDateInt = YYYYMMDD).
+    const ymd = (d) => Number(d.replaceAll("-", ""));
+    const afters = [
+      airing === "new" ? ymd(daysAgo(365, clock)) : 0,
+      airing === "week" ? ymd(daysAgo(1, clock)) : 0,
+      airing === "upcoming" && sort === "newest" ? ymd(daysAgo(0, clock)) : 0,
+      yearFrom ? (Number(yearFrom) - 1) * 10000 + 1231 : 0,
+    ];
+    const befores = [
+      airing === "week" ? ymd(daysAgo(-8, clock)) : 0,
+      yearTo ? (Number(yearTo) + 1) * 10000 + 101 : 0,
+    ].filter(Boolean);
+    const after = Math.max(...afters) || null,
+      before = befores.length ? Math.min(...befores) : null;
     try {
       const data = await anilist(
-        `query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort], $genre: String, $year: Int, $score: Int) { Page(page: $page, perPage: $perPage) { pageInfo { currentPage lastPage total hasNextPage } media(type: ANIME, isAdult: false, search: $search, sort: $sort, genre: $genre, seasonYear: $year, averageScore_greater: $score) { ${animeFields} } } }`,
+        `query ($page: Int, $perPage: Int, $search: String, $sort: [MediaSort], $genre: [String], $score: Int, $status: [MediaStatus], $startAfter: FuzzyDateInt, $startBefore: FuzzyDateInt) { Page(page: $page, perPage: $perPage) { pageInfo { currentPage lastPage total hasNextPage } media(type: ANIME, isAdult: false, search: $search, sort: $sort, genre_in: $genre, averageScore_greater: $score, status_in: $status, startDate_greater: $startAfter, startDate_lesser: $startBefore) { ${animeFields} } } }`,
         {
           page,
           perPage: limit,
           search: query || null,
-          genre: genre || null,
-          year: year ? Number(year) : null,
+          genre: genre.length ? genre : null,
           score: Number(minScore) ? Number(minScore) * 10 - 1 : null,
-          sort: query
-            ? ["SEARCH_MATCH"]
-            : sort === "rating"
-              ? ["SCORE_DESC"]
-              : sort === "newest"
-                ? ["START_DATE_DESC"]
-                : ["POPULARITY_DESC"],
+          status: airing
+            ? { new: ["RELEASING", "FINISHED"], airing: ["RELEASING"], ended: ["FINISHED", "CANCELLED"], upcoming: ["NOT_YET_RELEASED"], week: ["NOT_YET_RELEASED", "RELEASING"] }[airing]
+            : null,
+          startAfter: after,
+          startBefore: before,
         },
       );
       if (!data.Page) throw new ApiError("Missing anime results.");
@@ -311,6 +357,10 @@ export function createCatalog({
         page: String(page),
         limit: String(limit),
         ...(query ? { q: query } : {}),
+        ...(airing === "airing" ? { status: "airing" } : {}),
+        ...(airing === "ended" ? { status: "complete" } : {}),
+        ...(airing === "new" ? { start_date: daysAgo(365, clock) } : {}),
+        ...(airing === "upcoming" ? { status: "upcoming" } : {}),
         order_by:
           sort === "newest"
             ? "start_date"
@@ -322,7 +372,7 @@ export function createCatalog({
       return {
         results: (data.data || [])
           .map(normalizeJikan)
-          .filter((t) => matchesFilters(t, { genre, year, minScore })),
+          .filter((t) => matchesFilters(t, { genre: genre.join(","), yearFrom, yearTo, minScore })),
         page,
         totalPages: Math.min(data.pagination?.last_visible_page || 1, 500),
         total: data.pagination?.items?.total || 0,
@@ -340,8 +390,18 @@ export function createCatalog({
     mode = "demo",
     genre = "",
     year = "",
+    yearFrom = "",
+    yearTo = "",
     minScore = 0,
+    airing = "",
   } = {}) {
+    // `genre` may be a comma list; `year` is shorthand for a single-year range.
+    const genreList = genre ? String(genre).split(",").filter(Boolean) : [],
+      from = yearFrom || year,
+      to = yearTo || year,
+      filters = { genre: genreList.join(","), yearFrom: from, yearTo: to, minScore };
+    if (mode === "demo" && (airing === "upcoming" || airing === "week"))
+      return { results: [], page, totalPages: 1, total: 0, mode: "demo" };
     if (mode === "demo") {
       let results = demoTitles.filter(
         (t) =>
@@ -349,7 +409,7 @@ export function createCatalog({
           `${t.title} ${t.genres.join(" ")} ${t.creator}`
             .toLowerCase()
             .includes(query.toLowerCase()) &&
-          matchesFilters(t, { genre, year, minScore }),
+          matchesFilters(t, filters),
       );
       if (sort === "rating")
         results = results.toSorted((a, b) => b.score - a.score);
@@ -369,7 +429,7 @@ export function createCatalog({
         503,
       );
     if (kind === "anime") {
-      return animeList({ page, query, sort, genre, year, minScore });
+      return animeList({ page, query, sort, genre: genreList, yearFrom: from, yearTo: to, minScore, airing });
     }
     if (kind === "all") {
       // Provider pages advance independently; the UI labels this as a combined page, not a global ranking.
@@ -392,7 +452,7 @@ export function createCatalog({
       ];
       return {
         results: results.filter((t) =>
-          matchesFilters(t, { genre, year, minScore }),
+          matchesFilters(t, filters),
         ),
         page,
         totalPages: Math.max(
@@ -407,6 +467,8 @@ export function createCatalog({
             : b?.warning || null,
       };
     }
+    const upcoming = (airing === "upcoming" || airing === "week") && !query;
+    const dateKey = kind === "movie" ? "primary_release_date" : "first_air_date";
     const data = await tmdb(query ? `search/${kind}` : `discover/${kind}`, {
       page: String(page),
       ...(query
@@ -420,38 +482,52 @@ export function createCatalog({
                     ? "primary_release_date.desc"
                     : "first_air_date.desc"
                   : "popularity.desc",
-            "vote_count.gte": sort === "rating" ? "200" : "20",
-            ...(genre
+            "vote_count.gte": upcoming ? "0" : sort === "rating" ? "200" : "20",
+            // Upcoming: unreleased titles within the next year; "newest" means soonest first.
+            ...(upcoming
               ? {
-                  with_genres: String(
-                    Number(
+                  [`${dateKey}.gte`]: daysAgo(0, clock),
+                  [`${dateKey}.lte`]: daysAgo(airing === "week" ? -7 : -365, clock),
+                  ...(sort === "newest" ? { sort_by: `${dateKey}.asc` } : {}),
+                }
+              : {}),
+            ...(genreList.length
+              ? {
+                  with_genres: genreList
+                    .map((name) =>
                       Object.keys(genres).find(
                         (id) =>
-                          genres[id] === genre &&
+                          genres[id] === name &&
                           (kind === "tv"
                             ? !["28", "878"].includes(id)
                             : !["10759", "10765"].includes(id)),
                       ),
-                    ) || 0,
-                  ),
+                    )
+                    .filter(Boolean)
+                    .join(","),
                 }
               : {}),
-            ...(year
-              ? {
-                  [kind === "movie"
-                    ? "primary_release_year"
-                    : "first_air_date_year"]: String(year),
-                }
-              : {}),
+            ...(from ? { [`${dateKey}.gte`]: `${from}-01-01` } : {}),
+            ...(to ? { [`${dateKey}.lte`]: `${to}-12-31` } : {}),
             ...(Number(minScore)
               ? { "vote_average.gte": String(minScore) }
+              : {}),
+            // TV only: new = premiered in the last year, airing = returning series with a recent episode, ended = ended or cancelled.
+            ...(kind === "tv" && airing === "new"
+              ? { "first_air_date.gte": daysAgo(365, clock) }
+              : {}),
+            ...(kind === "tv" && airing === "airing"
+              ? { with_status: "0", "air_date.gte": daysAgo(14, clock) }
+              : {}),
+            ...(kind === "tv" && airing === "ended"
+              ? { with_status: "3|4" }
               : {}),
           }),
     });
     return {
       results: (data.results || [])
         .map((t) => normalizeTmdb(t, kind))
-        .filter((t) => !query || matchesFilters(t, { genre, year, minScore })),
+        .filter((t) => !query || matchesFilters(t, filters)),
       page,
       totalPages: Math.min(data.total_pages || 1, 500),
       total: data.total_results || 0,
@@ -497,7 +573,7 @@ export function createCatalog({
       );
     return normalizeTmdb(
       await tmdb(`${kind}/${id}`, {
-        append_to_response: "credits,videos,recommendations",
+        append_to_response: "credits,videos,recommendations,keywords",
       }),
       kind,
     );
@@ -544,5 +620,105 @@ export function createCatalog({
       })),
     };
   }
-  return { catalog, detail, availability, season, configured: Boolean(token) };
+  async function person(id) {
+    if (!token) throw new ApiError("Connect TMDB to explore people.", 503);
+    const data = await tmdb(`person/${id}`, { append_to_response: "combined_credits" });
+    const pick = (list, label) => {
+      const seen = new Map();
+      for (const c of list || []) {
+        if (!["movie", "tv"].includes(c.media_type) || !c.poster_path) continue;
+        const key = `${c.media_type}:${c.id}`,
+          role = label(c);
+        if (seen.has(key)) seen.get(key).roles.add(role);
+        else seen.set(key, { c, roles: new Set(role ? [role] : []) });
+      }
+      return [...seen.values()]
+        .sort((a, b) => (b.c.popularity || 0) - (a.c.popularity || 0))
+        .slice(0, 30)
+        .map(({ c, roles }) => ({ ...normalizeTmdb(c, c.media_type), role: [...roles].join(", ") }));
+    };
+    const crewJobs = ["Director", "Creator", "Writer", "Screenplay", "Executive Producer"];
+    return {
+      id: data.id,
+      name: data.name,
+      department: data.known_for_department || "",
+      biography: (data.biography || "").trim(),
+      birthday: data.birthday || "",
+      deathday: data.deathday || "",
+      placeOfBirth: data.place_of_birth || "",
+      photo: data.profile_path ? `https://image.tmdb.org/t/p/w500${data.profile_path}` : "",
+      acting: pick(data.combined_credits?.cast, (c) => c.character || ""),
+      crew: pick(
+        (data.combined_credits?.crew || []).filter((c) => crewJobs.includes(c.job)),
+        (c) => c.job,
+      ),
+    };
+  }
+  // Candidates for "For you". TMDB (movies/series) and AniList (anime) are separate pools:
+  // TMDB is searched by keyword id and by TMDB's own recommendations for titles you liked,
+  // AniList by tag name. Each candidate carries the keywords/tags it was found through.
+  async function foryou(kind, profile = {}) {
+    const keywords = (profile.keywords || []).slice(0, 6);
+    if (kind === "anime") {
+      const tags = keywords.map((k) => k.name).filter(Boolean);
+      const ids = tags.map((_, i) => i);
+      const vars = Object.fromEntries(tags.map((t, i) => [`t${i}`, t]));
+      const query = tags.length
+        ? `query (${ids.map((i) => `$t${i}: String`).join(", ")}) { ${ids
+            .map(
+              (i) =>
+                `a${i}: Page(page: 1, perPage: 16) { media(type: ANIME, isAdult: false, tag: $t${i}, sort: POPULARITY_DESC, averageScore_greater: 62) { ${animeFields} } }`,
+            )
+            .join(" ")} }`
+        : `query { a0: Page(page: 1, perPage: 24) { media(type: ANIME, isAdult: false, sort: SCORE_DESC, popularity_greater: 40000) { ${animeFields} } } }`;
+      const data = await anilist(query, vars);
+      const found = new Map();
+      Object.entries(data).forEach(([alias, pageData], i) => {
+        const tag = tags[Number(alias.slice(1))];
+        for (const m of pageData?.media || []) {
+          if (!m.idMal) continue;
+          const hit = found.get(m.idMal) || { ...normalizeAnilist(m), matched: [] };
+          if (tag && !hit.matched.includes(tag)) hit.matched.push(tag);
+          found.set(m.idMal, hit);
+        }
+      });
+      return { results: [...found.values()].slice(0, 80) };
+    }
+    if (!["movie", "tv"].includes(kind)) throw new ApiError("Invalid type.", 400);
+    if (!token) throw new ApiError("Connect TMDB to get live suggestions.", 503);
+    const found = new Map();
+    const add = (item, extra) => {
+      if (!item.poster_path) return;
+      const hit = found.get(item.id) || { ...normalizeTmdb(item, kind), matched: [], seed: "" };
+      if (extra.keyword && !hit.matched.includes(extra.keyword)) hit.matched.push(extra.keyword);
+      if (extra.seed && !hit.seed) hit.seed = extra.seed;
+      found.set(item.id, hit);
+    };
+    const jobs = [];
+    for (const k of keywords.filter((k) => k.id))
+      jobs.push(
+        tmdb(`discover/${kind}`, {
+          with_keywords: String(k.id),
+          sort_by: "popularity.desc",
+          "vote_count.gte": "150",
+          "vote_average.gte": "6.2",
+        }).then((d) => (d.results || []).forEach((r) => add(r, { keyword: k.name }))),
+      );
+    for (const seed of (profile.seeds || []).slice(0, 4))
+      jobs.push(
+        tmdb(`${kind}/${seed.id}/recommendations`).then((d) =>
+          (d.results || []).slice(0, 12).forEach((r) => add(r, { seed: seed.title })),
+        ),
+      );
+    if (!jobs.length)
+      jobs.push(
+        tmdb(`discover/${kind}`, {
+          sort_by: "vote_average.desc",
+          "vote_count.gte": "2000",
+        }).then((d) => (d.results || []).forEach((r) => add(r, {}))),
+      );
+    await Promise.allSettled(jobs);
+    return { results: [...found.values()].slice(0, 80) };
+  }
+  return { catalog, detail, availability, season, person, foryou, configured: Boolean(token) };
 }

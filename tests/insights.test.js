@@ -11,7 +11,6 @@ import {
   logWatch,
   getStats,
   recommendTitles,
-  pickTonight,
   scheduledTitles,
   validDate,
   hasWatched,
@@ -152,13 +151,15 @@ test("personal recommendations rank taste matches and exclude titles already sav
 test("watch-tonight picker honours media, runtime and high-priority choices", () => {
   let lib = saveTitle(emptyLibrary(), demoTitles[0]);
   lib = saveTitle(lib, demoTitles[2], { priority: "high" });
-  assert.equal(pickTonight(lib, { random: () => 0 }).key, demoTitles[2].key);
-  assert.equal(
-    pickTonight(lib, { minutes: 150, random: () => 0 }).key,
-    demoTitles[2].key,
-  );
-  assert.equal(pickTonight(lib, { minutes: 60 }), null);
-  assert.equal(pickTonight(lib, { kind: "anime" }), null);
+  // Sweeping the random value shows the high-priority title is drawn most often (weight 4 vs 2.5).
+  let high = 0;
+  for (let i = 0; i < 100; i++)
+    if (tonightPick(lib, { random: () => i / 100 }).title.key === demoTitles[2].key) high++;
+  assert.ok(high > 55 && high < 70, `high-priority share was ${high}%`);
+  assert.equal(tonightPick(lib, { random: () => 0 }).from, "watchlist");
+  assert.equal(tonightPick(lib, { minutes: 150, random: () => 0 }).title.key, demoTitles[2].key);
+  assert.equal(tonightPick(lib, { minutes: 60 }), null);
+  assert.equal(tonightPick(lib, { kind: "anime" }), null);
 });
 test("calendar only schedules dates that exist in actual saved metadata", () => {
   let lib = saveTitle(emptyLibrary(), demoTitles[0]);
@@ -180,7 +181,84 @@ test("not-interested titles are excluded from recommendations and tonight picks"
   const title = demoTitles[0];
   let lib = saveTitle(emptyLibrary(), title, { favorite: true });
   lib.dismissed = { [title.key]: title, [demoTitles[1].key]: demoTitles[1] };
-  assert.equal(pickTonight(lib), null);
+  assert.equal(tonightPick(lib), null);
   const picks = recommendTitles(lib, demoTitles);
   assert.ok(picks.every((p) => !lib.dismissed[p.title.key]));
+});
+import {
+  entryWeight,
+  tasteProfiles,
+  rankForYou,
+  tonightPick,
+} from "../public/js/insights.js";
+
+const tmdbTitle = (id, keywords, extra = {}) => ({
+  key: `tmdb:movie:${id}`,
+  source: "tmdb",
+  kind: "movie",
+  id,
+  title: `Movie ${id}`,
+  year: 2020,
+  score: 7,
+  poster: "",
+  backdrop: "",
+  overview: "",
+  genres: ["Drama"],
+  keywords: keywords.map((name, i) => ({ id: id * 100 + i, name })),
+  ...extra,
+});
+const withEntry = (lib, title, patch) => ({
+  ...lib,
+  entries: {
+    ...lib.entries,
+    [title.key]: { title, favorite: false, watched: false, rewatchQueued: false, status: "planned", rating: 0, notes: "", folders: [], progress: 0, priority: "normal", tags: [], ...patch },
+  },
+});
+
+test("entry weights: a 5 counts little, 7.5 more, a favourite more again regardless of rating, low ratings push away", () => {
+  const t = tmdbTitle(1, []);
+  const w = (patch) => entryWeight(emptyLibrary(), { title: t, status: "planned", ...patch });
+  const watched5 = w({ watched: true, rating: 5 }),
+    watched75 = w({ watched: true, rating: 7.5 }),
+    favUnrated = w({ favorite: true }),
+    favLow = w({ favorite: true, rating: 3 });
+  assert.ok(watched5 > 0 && watched5 < watched75);
+  assert.ok(favUnrated > watched75);
+  assert.ok(favLow > watched75, "a favourite outweighs its rating");
+  assert.ok(w({ rating: 3 }) < 0);
+  assert.ok(w({ rewatchQueued: true, watched: true, rating: 8 }) > w({ watched: true, rating: 8 }));
+});
+
+test("taste profiles keep TMDB keywords and AniList tags in separate models", () => {
+  const anime = tmdbTitle(2, ["Time Loop"], { key: "jikan:anime:2", source: "jikan", kind: "anime" });
+  let lib = withEntry(emptyLibrary(), tmdbTitle(1, ["heist"]), { favorite: true });
+  lib = withEntry(lib, anime, { favorite: true });
+  const p = tasteProfiles(lib);
+  assert.ok(p.tmdb.keywords.has("heist") && !p.tmdb.keywords.has("time loop"));
+  assert.ok(p.anime.keywords.has("time loop") && !p.anime.keywords.has("heist"));
+});
+
+test("ranking prefers keyword matches, drops saved titles and explains itself", () => {
+  let lib = withEntry(emptyLibrary(), tmdbTitle(1, ["heist", "chef"]), { favorite: true, watched: true, rating: 9 });
+  const p = tasteProfiles(lib).tmdb;
+  const match = tmdbTitle(10, [], { matched: ["heist"], genres: ["Comedy"] }),
+    plain = tmdbTitle(11, [], { genres: ["Comedy"] }),
+    saved = tmdbTitle(1, ["heist"]);
+  const ranked = rankForYou(p, [plain, match, saved], lib);
+  assert.deepEqual(ranked.map((r) => r.title.id), [10, 11]);
+  assert.match(ranked[0].reason, /heist/i);
+});
+
+test("tonight pick mixes watchlist and suggestions, honours filters and avoids repeats until the pool runs out", () => {
+  const list = withEntry(emptyLibrary(), tmdbTitle(1, [], { genres: ["Drama"], runtime: 45 }), { status: "planned" });
+  const sug = [{ title: tmdbTitle(2, [], { genres: ["Comedy"], runtime: 30 }), reason: "Matches your taste for x" }];
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) seen.add(tonightPick(list, { suggestions: sug }).title.id);
+  assert.deepEqual([...seen].sort(), [1, 2]);
+  assert.equal(tonightPick(list, { suggestions: sug, genre: "Comedy" }).from, "suggestion");
+  assert.equal(tonightPick(list, { suggestions: sug, minutes: 30 }).title.id, 2, "45 min does not fit 30");
+  assert.equal(tonightPick(list, { suggestions: sug, genre: "Horror" }), null);
+  const next = tonightPick(list, { suggestions: sug, exclude: ["tmdb:movie:1"] });
+  assert.equal(next.title.id, 2);
+  assert.equal(tonightPick(list, { suggestions: sug, exclude: ["tmdb:movie:1", "tmdb:movie:2"] }).cycled, true);
 });

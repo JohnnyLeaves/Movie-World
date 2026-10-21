@@ -24,7 +24,7 @@ export function createApp({
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://image.tmdb.org https://cdn.myanimelist.net https://s1.anilist.co https://s2.anilist.co https://s3.anilist.co https://s4.anilist.co data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://image.tmdb.org https://cdn.myanimelist.net https://s1.anilist.co https://s2.anilist.co https://s3.anilist.co https://s4.anilist.co data:; connect-src 'self'; frame-src https://www.youtube-nocookie.com; object-src 'none'; base-uri 'self'; form-action 'self'",
     );
     const json = (status, data) => {
       res.writeHead(status, {
@@ -51,21 +51,31 @@ export function createApp({
           page = Number(url.searchParams.get("page") || 1),
           sort = url.searchParams.get("sort") || "popular",
           genre = url.searchParams.get("genre") || "",
+          yearFrom = url.searchParams.get("yearFrom") || "",
+          yearTo = url.searchParams.get("yearTo") || "",
+          airing = url.searchParams.get("airing") || "",
           year = url.searchParams.get("year") || "",
           minScore = Number(url.searchParams.get("minScore") || 0);
         if (
           !["all", "movie", "tv", "anime"].includes(kind) ||
           !["live", "demo"].includes(mode) ||
           !["popular", "rating", "newest"].includes(sort) ||
+          !["", "new", "airing", "ended", "upcoming", "week"].includes(airing) ||
           !Number.isInteger(page) ||
           page < 1 ||
           page > 500 ||
           query.length > 150 ||
-          (genre && !GENRES.includes(genre)) ||
-          (year &&
-            (!/^\d{4}$/.test(year) ||
-              Number(year) < 1900 ||
-              Number(year) > new Date().getFullYear() + 5)) ||
+          (genre &&
+            (genre.split(",").length > 5 ||
+              !genre.split(",").every((g) => GENRES.includes(g)))) ||
+          [year, yearFrom, yearTo].some(
+            (y) =>
+              y &&
+              (!/^\d{4}$/.test(y) ||
+                Number(y) < 1900 ||
+                Number(y) > new Date().getFullYear() + 5),
+          ) ||
+          (yearFrom && yearTo && Number(yearFrom) > Number(yearTo)) ||
           !Number.isFinite(minScore) ||
           minScore < 0 ||
           minScore > 10
@@ -81,7 +91,10 @@ export function createApp({
             sort,
             genre,
             year,
+            yearFrom,
+            yearTo,
             minScore,
+            airing,
           }),
         );
       }
@@ -113,6 +126,31 @@ export function createApp({
           await catalog.availability(match[1], Number(match[2]), region),
         );
       }
+      if (url.pathname === "/api/foryou") {
+        const kind = url.searchParams.get("kind");
+        let profile;
+        try {
+          profile = JSON.parse(url.searchParams.get("profile") || "{}");
+        } catch {
+          throw new ApiError("Invalid profile.", 400);
+        }
+        const clean = {
+          keywords: (Array.isArray(profile.keywords) ? profile.keywords : [])
+            .slice(0, 8)
+            .filter((k) => k && typeof k.name === "string" && k.name.length <= 60)
+            .map((k) => ({ id: Number.isInteger(k.id) ? k.id : undefined, name: k.name })),
+          seeds: (Array.isArray(profile.seeds) ? profile.seeds : [])
+            .slice(0, 6)
+            .filter((x) => x && Number.isInteger(x.id) && typeof x.title === "string")
+            .map((x) => ({ id: x.id, title: x.title.slice(0, 120) })),
+        };
+        return json(200, await catalog.foryou(kind, clean));
+      }
+      if (url.pathname.startsWith("/api/person/")) {
+        const match = url.pathname.match(/^\/api\/person\/(\d+)$/);
+        if (!match) throw new ApiError("Invalid person.", 400);
+        return json(200, await catalog.person(Number(match[1])));
+      }
       if (url.pathname.startsWith("/api/season/")) {
         const match = url.pathname.match(/^\/api\/season\/(\d+)\/(\d+)$/);
         if (!match || Number(match[2]) > 200)
@@ -138,7 +176,8 @@ export function createApp({
       });
       res.end(req.method === "HEAD" ? undefined : body);
     } catch (error) {
-      if (error.code === "ENOENT" || error.code === "EISDIR")
+      // A malformed %-escape in the path is a bad request for a file that cannot exist.
+      if (error.code === "ENOENT" || error.code === "EISDIR" || error instanceof URIError)
         return json(404, { error: "File not found." });
       json(error.status || 500, {
         error: error.status

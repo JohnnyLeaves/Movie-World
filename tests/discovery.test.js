@@ -19,7 +19,8 @@ test("TMDB discovery forwards catalogue-wide filtering to the provider", async (
     fetcher: async (url) => {
       const u = new URL(url);
       assert.equal(u.searchParams.get("with_genres"), "878");
-      assert.equal(u.searchParams.get("primary_release_year"), "2017");
+      assert.equal(u.searchParams.get("primary_release_date.gte"), "2017-01-01");
+      assert.equal(u.searchParams.get("primary_release_date.lte"), "2017-12-31");
       assert.equal(u.searchParams.get("vote_average.gte"), "8");
       return Response.json({ results: [], total_pages: 1, total_results: 0 });
     },
@@ -117,4 +118,53 @@ test("new API routes validate input and require configured TMDB for protected pr
   );
   assert.equal((await fetch(`${base}/api/season/1/999`)).status, 400);
   assert.equal((await fetch(`${base}/api/season/1/1`)).status, 503);
+});
+test("airing filter maps to TMDB status/air-date and AniList status variables", async () => {
+  const seen = [];
+  const cat = createCatalog({
+    token: "secret",
+    clock: () => Date.parse("2026-06-15T00:00:00Z"),
+    fetcher: async (url, init) => {
+      seen.push(init?.body ? JSON.parse(init.body).variables : new URL(url).searchParams);
+      return Response.json({ results: [], total_pages: 1, total_results: 0, data: { Page: { pageInfo: {}, media: [] } } });
+    },
+  });
+  await cat.catalog({ kind: "tv", mode: "live", airing: "airing" });
+  assert.equal(seen[0].get("with_status"), "0");
+  assert.equal(seen[0].get("air_date.gte"), "2026-06-01");
+  await cat.catalog({ kind: "tv", mode: "live", airing: "ended" });
+  assert.equal(seen[1].get("with_status"), "3|4");
+  await cat.catalog({ kind: "anime", mode: "live", airing: "new" });
+  assert.deepEqual(seen[2].status, ["RELEASING", "FINISHED"]);
+  assert.equal(seen[2].startAfter, 20250615);
+});
+
+test("several genres, a year range and a decimal score reach TMDB and AniList as provider filters", async () => {
+  const seen = [];
+  const cat = createCatalog({
+    token: "secret",
+    clock: () => Date.parse("2026-06-15T00:00:00Z"),
+    fetcher: async (url, init) => {
+      seen.push(init?.body ? JSON.parse(init.body).variables : new URL(url).searchParams);
+      return Response.json({ results: [], total_pages: 1, total_results: 0, data: { Page: { pageInfo: {}, media: [] } } });
+    },
+  });
+  await cat.catalog({ kind: "tv", mode: "live", genre: "Drama,Crime", yearFrom: "2010", yearTo: "2019", minScore: 7.5 });
+  assert.equal(seen[0].get("with_genres"), "18,80");
+  assert.equal(seen[0].get("first_air_date.gte"), "2010-01-01");
+  assert.equal(seen[0].get("first_air_date.lte"), "2019-12-31");
+  assert.equal(seen[0].get("vote_average.gte"), "7.5");
+  await cat.catalog({ kind: "anime", mode: "live", genre: "Action,Comedy", yearFrom: "2000", yearTo: "2009" });
+  assert.deepEqual(seen[1].genre, ["Action", "Comedy"]);
+  assert.equal(seen[1].startAfter, 19991231);
+  assert.equal(seen[1].startBefore, 20100101);
+});
+test("matchesFilters needs every genre and honours the year range", async () => {
+  const { matchesFilters } = await import("../public/js/catalog-filters.js");
+  const t = { genres: ["Drama", "Crime"], year: 2015, score: 8 };
+  assert.ok(matchesFilters(t, { genres: ["Drama", "Crime"], yearFrom: 2010, yearTo: 2019, minScore: 7.5 }));
+  assert.ok(!matchesFilters(t, { genres: ["Drama", "Comedy"] }));
+  assert.ok(!matchesFilters(t, { yearFrom: 2016 }));
+  assert.ok(!matchesFilters(t, { yearTo: 2014 }));
+  assert.ok(matchesFilters(t, { genre: "Drama,Crime", year: 2015 }));
 });

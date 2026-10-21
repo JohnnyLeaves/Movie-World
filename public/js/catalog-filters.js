@@ -17,15 +17,22 @@ export const GENRES = [
   "War",
   "Western",
 ];
+// genre may be one name, a comma list, or `genres` an array; a title must have all of them.
 export function matchesFilters(
   title,
-  { genre = "", year = "", minScore = 0 } = {},
+  { genre = "", genres = [], year = "", yearFrom = "", yearTo = "", minScore = 0 } = {},
 ) {
+  const wanted = genres.length ? genres : String(genre || "").split(",").filter(Boolean),
+    from = Number(yearFrom || year) || 0,
+    to = Number(yearTo || year) || 0;
   return (
-    (!genre ||
-      title.genres.includes(genre) ||
-      (genre === "Sci-Fi" && title.genres.includes("Science Fiction"))) &&
-    (!year || title.year === Number(year)) &&
+    wanted.every(
+      (g) =>
+        title.genres.includes(g) ||
+        (g === "Sci-Fi" && title.genres.includes("Science Fiction")),
+    ) &&
+    (!from || (title.year && title.year >= from)) &&
+    (!to || (title.year && title.year <= to)) &&
     (!Number(minScore) || title.score >= Number(minScore))
   );
 }

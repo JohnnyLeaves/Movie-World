@@ -1,3 +1,15 @@
+# Redesign, upcoming releases and personal suggestions
+
+- New black, burgundy and old-gold theme with subtle motion and animated dropdowns.
+- Filter bar with several genres, a year range, half-point score and airing status; hide-watched tick box.
+- Upcoming and My upcoming pages, a Releasing this week strip, and a bell to follow unreleased titles.
+- "For you" rebuilt: separate TMDB-keyword and AniList-tag taste models, weighted by watching, ratings, favourites and rewatches.
+- "Tonight, decided" is now a three-question game that mixes the watchlist with suggestions.
+- People pages (photo, biography, age, sortable credits), an in-app trailer player, star ratings, episode tracking with a watched percentage, ongoing/ended labels and a next-episode banner.
+- Cards update in place (rating box after "watched", smooth removal) instead of rebuilding the page.
+- Removed: Undo, the Watch diary menu entry, the per-title notes/tags/priority panel and the "Log a watch" dialog.
+- Hardened image URL validation, malformed-URL handling, and refreshed the offline cache.
+
 # Small library improvements
 
 - Added reversible Not interested filtering, a restore list and exclusion from taste signals and tonight picks.

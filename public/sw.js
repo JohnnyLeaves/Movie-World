@@ -1,11 +1,12 @@
 import { matchesFilters } from "./js/catalog-filters.js";
-const CACHE = "movie-world-v3";
+const CACHE = "movie-world-v6";
 const SHELL = [
   "/",
   "/index.html",
   "/styles.css",
   "/experience.css",
   "/watch.css",
+  "/theme.css",
   "/manifest.webmanifest",
   "/assets/icon.svg",
   "/assets/tmdb.svg",
@@ -15,6 +16,7 @@ const SHELL = [
   "/js/insights.js",
   "/js/experience.js",
   "/js/catalog-filters.js",
+  "/js/select-menu.js",
 ];
 const DEMO = "/api/catalog?mode=demo";
 self.addEventListener("install", (event) =>

@@ -35,3 +35,19 @@ test("HTTP server serves the app and API with validation and security headers", 
   );
   assert.equal((await fetch(base + "/..%2f..%2fpackage.json")).status, 403);
 });
+
+test("new endpoints validate input, and a malformed URL is a 404 rather than a server error", async (t) => {
+  const server = createApp();
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(() => new Promise((r) => server.close(r)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  assert.equal((await fetch(base + "/%E0%A4%A")).status, 404);
+  assert.equal((await fetch(base + "/api/person/abc")).status, 400);
+  assert.equal((await fetch(base + "/api/foryou?kind=movie&profile=%7Bnope")).status, 400);
+  assert.equal((await fetch(base + "/api/foryou?kind=person")).status, 400);
+  // Filters: several genres, a year range and decimal scores are accepted; bad ones are not.
+  assert.equal((await fetch(base + "/api/catalog?genre=Drama,Crime&yearFrom=2010&yearTo=2019&minScore=7.5")).status, 200);
+  assert.equal((await fetch(base + "/api/catalog?genre=Drama,Nope")).status, 400);
+  assert.equal((await fetch(base + "/api/catalog?yearFrom=2020&yearTo=2010")).status, 400);
+  assert.equal((await fetch(base + "/api/catalog?airing=upcoming&mode=demo")).status, 200);
+});

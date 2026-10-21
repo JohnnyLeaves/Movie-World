@@ -159,3 +159,63 @@ test("AniList descriptions are normalized as plain text", () => {
   });
   assert.equal(t.overview, "A story\nof hope & courage.");
 });
+
+test("for-you candidates are found per provider by keyword/tag and by similar titles", async () => {
+  const calls = [];
+  const cat = createCatalog({
+    token: "secret",
+    fetcher: async (url, init) => {
+      const u = new URL(url);
+      calls.push(init?.body ? "anilist" : u.pathname);
+      if (init?.body)
+        return Response.json({
+          data: {
+            a0: { media: [{ idMal: 7, title: { romaji: "Loop" }, genres: [], tags: [{ name: "Time Loop", rank: 90 }] }] },
+          },
+        });
+      if (u.pathname.endsWith("/discover/tv"))
+        return Response.json({ results: [{ id: 1, name: "A", poster_path: "/a.jpg", genre_ids: [] }] });
+      if (u.pathname.endsWith("/recommendations"))
+        return Response.json({ results: [{ id: 1, name: "A", poster_path: "/a.jpg", genre_ids: [] }, { id: 2, name: "B", poster_path: "/b.jpg", genre_ids: [] }, { id: 3, name: "NoPoster", genre_ids: [] }] });
+      throw Error("unexpected " + url);
+    },
+  });
+  const tv = await cat.foryou("tv", { keywords: [{ id: 99, name: "heist" }], seeds: [{ id: 5, title: "Seed Show" }] });
+  const a = tv.results.find((t) => t.id === 1);
+  assert.deepEqual(a.matched, ["heist"]);
+  assert.equal(a.seed, "Seed Show");
+  assert.equal(tv.results.find((t) => t.id === 2).seed, "Seed Show");
+  assert.ok(!tv.results.some((t) => t.id === 3), "titles without artwork are skipped");
+  const anime = await cat.foryou("anime", { keywords: [{ name: "Time Loop" }] });
+  assert.deepEqual(anime.results[0].matched, ["Time Loop"]);
+  assert.deepEqual(anime.results[0].keywords, [{ name: "Time Loop" }]);
+  await assert.rejects(() => cat.foryou("person", {}), /Invalid type/);
+});
+
+test("person profiles merge duplicate credits and keep roles, newest data first by popularity", async () => {
+  const cat = createCatalog({
+    token: "secret",
+    fetcher: async () =>
+      Response.json({
+        id: 9, name: "Pat", known_for_department: "Acting", biography: " Bio ", birthday: "1990-01-02", profile_path: "/p.jpg",
+        combined_credits: {
+          cast: [
+            { id: 1, media_type: "tv", name: "Show", poster_path: "/s.jpg", character: "Ann", popularity: 5 },
+            { id: 2, media_type: "movie", title: "Film", poster_path: "/f.jpg", character: "Bo", popularity: 9 },
+            { id: 3, media_type: "tv", name: "NoArt", character: "X", popularity: 99 },
+          ],
+          crew: [
+            { id: 2, media_type: "movie", title: "Film", poster_path: "/f.jpg", job: "Director", popularity: 9 },
+            { id: 2, media_type: "movie", title: "Film", poster_path: "/f.jpg", job: "Writer", popularity: 9 },
+            { id: 4, media_type: "movie", title: "Gaffer", poster_path: "/g.jpg", job: "Gaffer", popularity: 9 },
+          ],
+        },
+      }),
+  });
+  const p = await cat.person(9);
+  assert.equal(p.biography, "Bio");
+  assert.deepEqual(p.acting.map((t) => t.title), ["Film", "Show"]);
+  assert.equal(p.crew.length, 1);
+  assert.equal(p.crew[0].role, "Director, Writer");
+  assert.match(p.photo, /w500\/p\.jpg$/);
+});
