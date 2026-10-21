@@ -1,0 +1,11 @@
+{
+  "appId": "app.movieworld.personal",
+  "appName": "Movie World",
+  "webDir": "public",
+  "backgroundColor": "#0a0608",
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 600, "backgroundColor": "#0a0608", "showSpinner": false },
+    "StatusBar": { "style": "DARK", "backgroundColor": "#0a0608" }
+  }
+}

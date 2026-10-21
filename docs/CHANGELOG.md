@@ -16,6 +16,11 @@
 - Title and person views are full-screen pages and Settings/Tonight are bottom sheets on phones; safe-area spacing for notches.
 - The Android back button (and a browser's) closes the top dialog before leaving the page.
 
+# Android app
+
+- Capacitor wrapper (`android/`) around `public/`; builds a debug APK. Icons and splash are generated from the logo.
+- In the app, backups are shared through the Android share sheet instead of a download link, and the service worker is not registered.
+
 # Standalone data layer
 
 - The catalogue code and the API routes (`api-core.js`) now run in the app itself, so it works with no Node server: the TMDB read token is pasted, tested and saved in Settings (kept only on the device, never in backups).

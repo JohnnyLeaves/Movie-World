@@ -71,6 +71,18 @@ The app expects a TMDB **Bearer read token**, not the shorter v3 API key and not
 
 **No server (phone app):** when the page is opened without the Node server (for example from a static host or a packaged app), it calls TMDB, AniList and Jikan directly. Paste the token in **Settings → TMDB**, press Test, then Save. The token is stored only on that device and is not part of library backups.
 
+## Android app
+
+Needs Android Studio (for its bundled Java 21 and the Android SDK). In PowerShell:
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+"sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk" | Set-Content android\local.properties
+npm run apk
+```
+
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`; copy it to the phone and install it (allow installs from your file manager). Re-run `npm run apk` after any change in `public/`. `npm run icons` regenerates the launcher icon and splash screen from `public/assets/icon.svg`'s drawing in `scripts/make-icons.mjs`. Library backups are exported through the Android share sheet.
+
 ## Data and privacy
 
 The personal library is stored under `movie-world.library.v1` in **this browser’s localStorage**. It is not sent to TMDB or Jikan. There is no cloud sync, account backend or server-side user database in this MVP. A different browser, profile or origin (including changing ports) has a separate library. Export a JSON backup before clearing browser data or moving devices. Import replaces the current library after confirmation.

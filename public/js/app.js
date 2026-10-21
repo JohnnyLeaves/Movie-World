@@ -1284,7 +1284,18 @@ function settings() {
     "Settings and catalogue credits",
   );
 }
+const nativeApp = Boolean(window.Capacitor?.isNativePlatform?.());
+// In the Android app a blob link does nothing, so the file is written to the cache and handed to the share sheet.
+async function shareFile(content, filename) {
+  const { Filesystem, Share } = window.Capacitor.Plugins,
+    { uri } = await Filesystem.writeFile({ path: filename, data: content, directory: "CACHE", encoding: "utf8" });
+  await Share.share({ title: filename, files: [uri], dialogTitle: "Save or send your backup" });
+}
 function download(content, filename) {
+  if (nativeApp)
+    return shareFile(content, filename).catch((e) => {
+      if (!/cancel/i.test(e?.message || "")) toast("Could not export the file.");
+    });
   const url = URL.createObjectURL(
       new Blob([content], { type: "application/json" }),
     ),
@@ -2124,7 +2135,7 @@ window.addEventListener("message", (e) => {
 });
 shell();
 readRoute();
-if ("serviceWorker" in navigator)
+if ("serviceWorker" in navigator && !nativeApp)
   navigator.serviceWorker
     .register("/sw.js", { type: "module" })
     .catch(() => {});
